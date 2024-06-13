@@ -1,2 +1,2 @@
-Website:
+Website URL:
   www.purplesite.skin
