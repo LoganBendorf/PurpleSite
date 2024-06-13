@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Purple Site</title>
+    <script src="script.js" defer></script>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=Comic+Neue:ital,wght@0,300;0,400;0,700;1,300;1,400;1,700&display=swap');
+    </style>
+
+<body>
+    <div class="container">
+        <div class="topContainer">
+            <button class="hallOfFame" onclick="goToHallOfFame(event);">In Progress</button>
+            <div class="usernameContainer">
+                <div class="username">Username:
+                    <input class="composeInput usernameInput"></input>
+                </div>
+            </div>
+        </div>
+        <div class="mainContainer">
+            <div class="contentContainer">
+                <div>Emails</div>
+                <div class="emailContainer"></div>
+            </div>
+            <div class="contentContainer">
+                <div>Compose</div>
+                <div class="composeContainer">
+                    <div class="questionContainer">
+                        <div class="composeQuestion recipient">To whome?:
+                            <input class="composeInput recipientInput"></input>
+                        </div>
+                    </div>
+                    <div class="questionContainer">
+                        <div class="composeQuestion title">Title:
+                            <input class="composeInput titleInput"></input>
+                        </div>
+                    </div>
+                    <div class="composeArea">
+                        <textarea class="textAreaInput"></textarea>
+                    </div>
+                    <div class="composeFooter">
+                        <button class="send" onclick="sendFunction(event);">SEND</button>
+                        <button class= "emojiButton emoji" onclick="emojiFunction(event);">:o</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!--<button onclick="deleteEverything()">press 2 die</button> -->
+    </div>
+</body>
+</html>

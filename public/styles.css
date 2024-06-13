@@ -1,0 +1,305 @@
+html {
+    width: 99%;
+    height: 95%;
+    background-color: #cb88d2;
+    font-family: "Comic Neue", 'Comic Sans MS', 'Comic Sans', cursive;
+    font-style: italic;
+    font-weight: 700;
+    color: whitesmoke;
+}
+body {
+    height: 100%;
+    font-size: 30px;
+    font-weight: 700;
+}
+
+.container {
+    display: flex;
+    flex-direction: column;
+    width: 99%;
+    height: 99%;
+}
+.topContainer {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    margin: .5em 1em .5em 1em;
+}
+
+.hallOfFame {
+    font-family: "Comic Neue", 'Comic Sans MS', 'Comic Sans', cursive;
+    font-weight: 700;
+    color:white;
+    font-size: 30px;
+    font-weight: 550;
+    background-color: #cb88d2;
+    border: solid yellow;
+    padding: .5em;
+    align-self: center;
+}
+.hallOfFame:hover {
+    border-color: red;
+}
+.usernameContainer {
+    display: flex;
+    flex-direction: row;
+    padding: .1em;
+    align-self: center;
+    margin-right: 8em;
+}
+.username {
+    position: relative;
+
+    border-bottom: dashed;  
+    border-width: 4px;
+    padding: .1em;
+    align-self: center;
+
+    width: 10ch;
+}
+.usernameInput {
+    position: absolute;
+
+    border: dashed black;
+    top: -.9em;
+    left: 4.7em;
+}
+
+.titleContainer {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+}
+.mainContainer {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-evenly;
+    width: 99%;
+    height: 92%;
+}
+.contentContainer {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    flex-grow: 1;     
+    flex-shrink: 0;  
+    flex-basis: 10em; 
+}
+.emailContainer {
+    border: solid white;
+    border-width: 6px;
+    border-radius: 20px;
+    margin-top: .3em;
+    margin-bottom: 2em;
+    overflow-y: auto;
+
+    width: 92%;
+    height: 100%;
+}
+.email {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    border-bottom: dashed #c3c3c3;
+    border-width: 4px;
+    margin: .5em 1em 0em 1em;
+}
+.emailSender {
+    flex-basis: 1em;
+    padding: 0  0 .2em .1em;
+}
+.emailTitle {
+    border-bottom: dashed #c3c3c3;
+    border-width: 4px;
+    flex-basis: 1em;
+    padding: 0  0 .2em .1em;
+}
+.emailBody {
+    font-size: smaller;
+    flex-basis: 1em;
+    margin: .5em 1em 0em .3em;
+}
+.emailUpvoteContainer {
+    display: flex;
+    flex-direction: row;
+    justify-content: flex-end;
+    flex-basis: 1em;
+}
+.emailUpvotes {
+    flex-basis: 1em;
+}
+.emailUpvoteButton {
+    flex-basis: 1em;
+}
+.composeContainer {
+    border: solid white;
+    border-width: 6px;
+    border-radius: 20px;
+    margin-top: .3em;
+    margin-bottom: 2em;
+
+    display: flex;
+    flex-direction: column;
+    justify-content: space-evenly;
+    flex-grow: 1;     
+    flex-shrink: 1;   
+    flex-basis: 30em; 
+    width: 92%;
+    height: 100%;
+}
+.questionContainer {
+    display: flex;
+    flex-direction: row;
+    justify-content: flex-start;
+    align-items: center;
+    margin: .5em 1em 0em 1em;
+    padding: 0em 0em 0em 0em;
+}
+
+.composeQuestion {
+    border-bottom: dashed #c3c3c3;
+    border-width: 4px;
+    padding: 0  0 .2em .1em;
+}
+.recipient {
+    position: relative;
+    width: 11ch;
+}
+.recipientInput {
+    border: dashed black;
+    position: absolute;
+    top: -.9em;
+    left: 5em;
+}
+.title {
+    position: relative;
+    width: 5ch;
+}
+.titleInput {
+    border: dashed black;
+    position: absolute;
+    top: -.9em;
+    left: 2em;
+}
+input {
+    width: 1ch;
+    border: none;
+    background-color:#cb88d2;
+    outline-width: 0;
+    font-family: "Comic Neue", 'Comic Sans MS', 'Comic Sans', cursive;
+    font-style: italic;
+    font-weight: 700;
+    color:whitesmoke;
+    font-size: 30px;
+    font-weight: 550;
+}
+.composeInput {
+    margin: .8em;
+    width: 95%;
+    height: 95%;
+}
+
+.composeArea {
+    border: dashed white;
+    border-width: 6px;
+    border-radius: 20px;
+    margin: .7em .5em .5em .5em;
+    width: 90%;
+
+    align-self: center;
+    flex-grow: 1;
+    flex-shrink: 1;
+}
+.textAreaInput {
+    margin: .4em;
+    width: 90%;
+    height: 85%;
+    flex-shrink: 1;
+}
+textarea {
+    border: none;
+    background-color:#cb88d2;
+    outline-width: 0;
+    font-family: "Comic Neue", 'Comic Sans MS', 'Comic Sans', cursive;
+    font-style: italic;
+    font-weight: 700;
+    color:whitesmoke;
+    font-size: 30px;
+
+    font-weight: 550;
+    resize: none;
+    overflow: hidden;
+    flex-grow: 1;
+    flex-shrink: 1;
+}
+
+.composeFooter {
+    margin: .3em .5em .5em .5em;
+
+    display:flex;
+    flex-direction: row;
+    justify-content: space-between;
+    flex-grow: 0;     /* do not grow   - initial value: 0 */
+    flex-shrink: 0;   /* do not shrink - initial value: 1 */
+    flex-basis: 0em; /* width/height  - initial value: auto */
+}
+
+.send {
+    background-color: #c8bfe7;
+    border: solid white;
+    border-radius: 15px;
+    color: darkslategrey;
+    padding: 6px 8px;
+    font-family: "Comic Sans MS", "Comic Sans", cursive;
+    font-size: 20px;
+    font-weight: 550;
+}
+.send:hover {
+    border-color: red;
+}
+.emojiButton {
+    position: relative;
+    background-color: #cb88d2;
+    border: solid white;
+    border-radius: 50px;
+    outline: none;
+
+    color: white;
+    padding: 6px 8px;
+    margin-right: 3em;
+
+    font-family: "Comic Sans MS", "Comic Sans", cursive;
+    font-size: 20px;
+    font-weight: 550;
+}
+.emojiButton:hover {
+    border-color: red;
+    outline: none;
+}
+.emojiButton:focus {
+    outline: none;
+}
+.emojiMenu {
+    position: absolute;
+    bottom: 2em;
+    right: -2.5em;
+
+    display: flex;
+    flex-wrap: wrap;
+
+    width: 10em;
+    height: 10em;
+    background-color: whitesmoke;
+    border: solid darkblue;
+}
+.littleEmoji {
+    border: dashed black;
+    background-color: red;
+
+    min-width: .5em;
+    min-height: .5em;
+
+    flex-grow: 1;
+    flex-shrink: 1;
+}
