@@ -37,6 +37,7 @@
 #define PRINT_POST_PARSE true
 #define PRINT_HASH true
 #define PROFANITY_PRINT true
+#define PRINT_HASH true
 
 #define MAX_REQUEST_SIZE 2047
 
@@ -103,8 +104,8 @@ void print_client(struct client_info* client, FILE* fd);
 int main(int argc, char* argv[]) {
     printf("SIZE OF FD_SETSIZE (MAX NUM CONNECTIONS) = %d\n", FD_SETSIZE);
 
-    if (argc != 2) {
-        printf("usage: ./https_server PORT\n");
+    if (argc > 2) {
+        printf("usage: ./https_server [PORT]\n");
         return 0;
     }
 
@@ -136,12 +137,17 @@ int main(int argc, char* argv[]) {
         return 1;
     }
     
-    // CREATE SERVER SOCKET ON PORT argv[1]
-    int server = create_socket(0, argv[1]);
+    // CREATE SERVER SOCKET ON PORT argv[1] or default 443
+    int server;
+    if (argc == 1) {
+        server = create_socket(0, "443");
+    } else {
+        server = create_socket(0, argv[1]);
+    }
     int http = create_socket(0, "80");
 
     const int webserver_uid = 1001;
-    const int webserver_gid = 1001;
+    const int webserver_gid = 1002;
     // drop root privileges if root
     if (getuid() == 0) {
         printf("sudo, dropping root privileges\n");
@@ -237,11 +243,9 @@ int main(int argc, char* argv[]) {
                 }
 
             } else {
-            printf("New connection from %s.\n", get_client_address(client));
-
-            printf("SSL connection using %s\n", SSL_get_cipher(client->ssl));
+                printf("New connection from %s.\n", get_client_address(client));
+                printf("SSL connection using %s\n", SSL_get_cipher(client->ssl));
             }
-
         }
 
         struct client_info* client = clients;
@@ -251,7 +255,8 @@ int main(int argc, char* argv[]) {
 
             if (FD_ISSET(client->socket, &reads)) {
 
-                // Skips client if there's an error, maybe should kill or handle error or something
+                // Skips client if getsockopt() returns an error, dies if getsockopt() failed
+                // maybe should handle error
                 int errorVal = 0;
                 socklen_t size = client->address_length;
                 if (getsockopt(client->socket, SOL_SOCKET, SO_ERROR, &errorVal, &size) < 0) {
@@ -265,15 +270,11 @@ int main(int argc, char* argv[]) {
                     continue;
                 }
 
-
                 if (MAX_REQUEST_SIZE == client->received) {
                     send_400(client, NULL);
                     continue;
                 }
 
-                //int bytes_read = recv(client->socket,
-                 //           client->request + client->received,
-                  //          MAX_REQUEST_SIZE - client->received, 0);
                 int bytes_read = SSL_read(client->ssl,
                             client->request + client->received,
                             MAX_REQUEST_SIZE - client->received);
@@ -284,27 +285,27 @@ int main(int argc, char* argv[]) {
                 if (bytes_read < 1) {
                     printf("Unexpected disconnect from %s.\n", get_client_address(client));
                     drop_client(client);
-                } else {
-                    client->received += bytes_read;
-                    client->request[client->received] = 0;
+                    continue;
+                }
+                client->received += bytes_read;
+                client->request[client->received] = 0;
 
-                    char* q = strstr(client->request, "\r\n\r\n");
-                    if (q) {
-                        // strncmp returns 0 if strings are equal for some god-awful reason
-                        if (strncmp("GET /", client->request, 5) == 0) {
-                            char* path = client->request + 4;
-                            char* end_path = strstr(path, " ");
-                            if (!end_path) {
-                                send_400(client, NULL);
-                            } else {
-                                *end_path = 0;
-                                serve_resource(client, path);
-                            }
-                        } else if (strncmp("POST /", client->request, 6) == 0) {
-                            handle_post(client);
-                        } else {
+                char* q = strstr(client->request, "\r\n\r\n");
+                if (q) {
+                    // strncmp returns 0 if strings are equal
+                    if (strncmp("GET /", client->request, 5) == 0) {
+                        char* path = client->request + 4;
+                        char* end_path = strstr(path, " ");
+                        if (!end_path) {
                             send_400(client, NULL);
+                        } else {
+                            *end_path = 0;
+                            serve_resource(client, path);
                         }
+                    } else if (strncmp("POST /", client->request, 6) == 0) {
+                        handle_post(client);
+                    } else {
+                        send_400(client, NULL);
                     }
                 }
             }
@@ -313,10 +314,10 @@ int main(int argc, char* argv[]) {
         }
     }
 
+    printf("\nClosing server...\n");
     // while might be buggy, untested
     while (clients) drop_client(clients);
     SSL_CTX_free(ctx);
-    printf("\nClosing socket...\n");
     close(server);
     printf("Finished.\n");
     return 0;
@@ -348,9 +349,9 @@ const char* get_content_type(const char* path) {
     }
     #if PRINT_FILE_TYPE == true
     #undef return 
-    #endif
     printf("Type = %s\n", type);
     printf("Path = %s\n\n", path);
+    #endif
     return type;
 }
 
@@ -1441,7 +1442,7 @@ struct email parse_user_file_data(char* username) {
     */
 }
 
-#if HASH_PRINT == false
+#if PRINT_HASH == false
 #define printf(...) 
 #endif
 // should only put kosher strings into this function
@@ -1456,6 +1457,9 @@ int hash_function(char* string) {
     printf("hash_function() received: %s\n", copy_string);
     int hash = 5381;
     for (int i = 0; i < strlen(string); i++) {
+
+        printf("hash = %d\n", hash);
+        printf("profanity_hash[0] = %d\n", profanity_hash_list[0]);
         // if emoji
         if (copy_string[i] >> 7 == 1) {
             printf("hash_function() detected emoji\n");
@@ -1492,7 +1496,7 @@ int hash_function(char* string) {
     }
     return hash;
 }
-#if HASH_PRINT == false
+#if PRINT_HASH == false
 #undef printf
 #endif
 
@@ -1539,7 +1543,7 @@ bool contains_profanity(char* string) {
     int quinter;
     //printf("min_size_profanity = %d\n", min_size_profanity);
     //printf("max_size_profanity = %d\n", max_size_profanity);
-    for (int i = min_size_profanity; i <= max_size_profanity; i++) {
+    for (int i = min_size_profanity; i <= max_size_profanity * 2; i++) {
         //printf("in for loop\n");
         pointer = 0;
         quinter = i;
