@@ -30,6 +30,13 @@ function globalClickListener(event) {
 }
 function globalKeyDownListener(event) {
     closeEmojiMenuIfShould(event, "keyboard");
+
+    // Check if should update emails
+    if (event.key === 'Tab') {
+        console.log("key equaled tab\n");
+        currentUsername = document.querySelector('.usernameInput').value;
+        getFunction("/emails.txt");
+    }
 }
 
 function closeEmojiMenuIfShould(event, keyboardOrMouse) {
@@ -137,6 +144,7 @@ function resizeInput(e) {
         return false;
     }
     e.target.style.width = (e.target.value.length +1) * 8 + 50 + "px";
+
 }
 
 function resizeInputUp(e) {
@@ -145,6 +153,18 @@ function resizeInputUp(e) {
         e.target.value = e.target.value.slice(0, maxInputSize);
     }
     e.target.style.width = (e.target.value.length +1) * 8 + 50 + "px";
+
+    // Check if should update emails
+    if (e.key === 'Enter') {
+        console.log("key equaled enter\n");
+        for (let i = 0; i < e.target.classList.length; i++) {
+            if (e.target.classList[i] === 'usernameInput') {
+                console.log("class equaled usernameInput\n");
+                currentUsername = e.target.value;
+                getFunction("/emails.txt");
+            }
+        }
+    }
 }
 
 const textAreaSize = 600
@@ -404,19 +424,15 @@ async function makePost() {
     }
     
     let postData = new FormData();
-    //usernameString = "\n COCK \n";
     postData.append('username', usernameString);
     console.log("USERNAMESTRING = " + usernameString);
     
-    //recipientString = "    COCK";
     postData.append('recipient', recipientString);
     console.log("RECIPIENTSTRING = " + recipientString);
 
-    //titlestring = "    COCK";
     postData.append('title', titlestring);
     console.log("TITLESTRING = " + titlestring);
 
-    //composeString = "COCK    ";
     postData.append('composeText', composeString);
     console.log("COMPOSESTRING = " + composeString);
     
