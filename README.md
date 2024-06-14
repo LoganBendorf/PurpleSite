@@ -1,2 +1,2 @@
 Website URL:
-  www.purplesite.skin
+  https://www.purplesite.skin
