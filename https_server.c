@@ -1,4 +1,12 @@
 
+#define MAX_NAME_CHARACTERS     15
+#define MAX_NAME_BYTES          MAX_NAME_CHARACTERS * 4
+#define MAX_TITLE_CHARACTERS    24
+#define MAX_TITLE_BYTES         MAX_TITLE_CHARACTERS * 4
+#define MAX_COMPOSE_CHARACTERS  200
+#define MAX_COMPOSE_BYTES       MAX_COMPOSE_CHARACTERS * 4
+
+
 // to kill a program with a certain PORT, use
 // sudo fuser -k PORT/tcp
 
@@ -31,17 +39,17 @@
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 
-#define PRINT_RECEIVED true
-#define PRINT_FILE_TYPE true
-#define PRINT_400 true
+#define PRINT_RECEIVED   true
+#define PRINT_FILE_TYPE  true
+#define PRINT_400        true
 #define PRINT_POST_PARSE true
-#define PRINT_HASH true
-#define PROFANITY_PRINT true
-#define PRINT_HASH true
+#define PRINT_HASH       true
+#define PROFANITY_PRINT  true
+#define PRINT_HASH       true
 
 #define MAX_REQUEST_SIZE 2047
 
-// struct size turns out to be about 2204 (double check), may want to pad? make multiple of 64?
+// struct size turns out to be about 2204 (double check), may want to pad?
 // maybe a pointer to char request would be better
 struct client_info {
     socklen_t address_length;
@@ -94,7 +102,7 @@ void send_400(struct client_info* client, char* string);
 void send_404(struct client_info* client);
 void serve_resource(struct client_info* client, const char* path);
 void handle_post(struct client_info* client);
-bool is_input_kosher(char* string, int type);
+int num_kosher_chars(char* string, int type);
 struct email parse_user_file_data(char* username);
 int hash_function(char* string);
 void hash_profanity_list();
@@ -447,7 +455,7 @@ void drop_client(struct client_info* client) {
 
 const char* get_client_address(struct client_info* ci) {
 
-    // book has this buffer static but i see zero reason why is should be, just creates problems ( multuihreading)
+    // static might create problems with multuihreading
     static char address_buffer[100];
     getnameinfo((struct sockaddr*) &ci->address,
             ci->address_length,
@@ -785,10 +793,8 @@ void handle_post(struct client_info* client) {
     }
     pointer += 2;
 
-    const int MAX_USERNAME_LENGTH = 31;
-    const int MAX_USERNAME_CHARACTERS = 16;
     quinter = strstr(pointer, boundary);
-    if (quinter - pointer <= 2 || quinter - pointer > MAX_USERNAME_LENGTH + 2) {
+    if (quinter - pointer <= 2 || quinter - pointer > MAX_NAME_BYTES + 2) {
         printf("pointer = %p\n", pointer);
         printf("quinter = %p\n", quinter);
         locateContentFail(__LINE__, "Failed to locate content, malformed or request size too large\n");
@@ -801,13 +807,13 @@ void handle_post(struct client_info* client) {
             locateContentFail(__LINE__, NULL);
         }
     }
-    if (quinter - pointer > MAX_USERNAME_LENGTH) {
+    if (quinter - pointer > MAX_NAME_BYTES) {
         printf("pointer = %p\n", pointer);
         printf("quinter = %p\n", quinter);
         locateContentFail(__LINE__, NULL);
     }
     
-    char username[MAX_USERNAME_LENGTH + 1];
+    char username[MAX_NAME_BYTES + 1];
     for (int i = 0; i < quinter - pointer; i++) {
         if (*pointer == ' ' || *pointer == '\t' || *pointer == '\n' || *pointer == '\r'){
             continue;
@@ -841,8 +847,13 @@ void handle_post(struct client_info* client) {
         return;
     }
 
-    if (!is_input_kosher(username, 0)) {
+    int kosher_chars;
+    kosher_chars = num_kosher_chars(username, 0);
+    if (kosher_chars <= 0) {
         locateContentFail(__LINE__, "Username is not kosher");
+    }
+    if (kosher_chars > MAX_NAME_CHARACTERS) {
+        locateContentFail(__LINE__, "Username contained too many characterss");
     }
 
     if (contains_profanity(username)) {
@@ -868,7 +879,7 @@ void handle_post(struct client_info* client) {
     pointer += 2;
 
     quinter = strstr(pointer, boundary);
-    if (quinter - pointer <= 2 || quinter - pointer > MAX_USERNAME_LENGTH + 2) {
+    if (quinter - pointer <= 2 || quinter - pointer > MAX_NAME_BYTES + 2) {
         locateContentFail(__LINE__, NULL);
     }
 
@@ -879,10 +890,10 @@ void handle_post(struct client_info* client) {
             locateContentFail(__LINE__, NULL);
         }
     }
-    if (quinter - pointer > MAX_USERNAME_LENGTH) {
+    if (quinter - pointer > MAX_NAME_BYTES) {
         locateContentFail(__LINE__, NULL);
     }
-    char recipient[MAX_USERNAME_LENGTH + 1];
+    char recipient[MAX_NAME_BYTES + 1];
     for (int i = 0; i < quinter - pointer; i++) {
         recipient[i] = pointer[i];
     }
@@ -946,8 +957,12 @@ void handle_post(struct client_info* client) {
         locateContentFail(__LINE__, "Recipient equals sender");
     }
 
-    if (!is_input_kosher(recipient, 0)) {
+    kosher_chars = num_kosher_chars(recipient, 0);
+    if (kosher_chars <= 0) {
         locateContentFail(__LINE__, "Recipient is not kosher");
+    }
+    if (kosher_chars > MAX_NAME_CHARACTERS) {
+        locateContentFail(__LINE__, "Recipient contained too many characterss");
     }
 
     if (contains_profanity(recipient)) {
@@ -972,9 +987,8 @@ void handle_post(struct client_info* client) {
     }
     pointer += 2;
 
-    const int MAX_TITLE_LENGTH = 15;
     quinter = strstr(pointer, boundary);
-    if (quinter - pointer <= 2 || quinter - pointer > MAX_TITLE_LENGTH) {
+    if (quinter - pointer <= 2 || quinter - pointer > MAX_TITLE_BYTES) {
         locateContentFail(__LINE__, NULL);
     }
 
@@ -985,7 +999,7 @@ void handle_post(struct client_info* client) {
             locateContentFail(__LINE__, NULL);
         }
     }
-    char title[MAX_TITLE_LENGTH + 1];
+    char title[MAX_TITLE_BYTES + 1];
     for (int i = 0; i < quinter - pointer; i++) {
         title[i] = pointer[i];
     }
@@ -1016,8 +1030,12 @@ void handle_post(struct client_info* client) {
         return;
     }
 
-    if (!is_input_kosher(title, 0)) {
+    kosher_chars = num_kosher_chars(title, 0);
+    if (kosher_chars <= 0) {
         locateContentFail(__LINE__, "Title is not kosher");
+    }
+    if (kosher_chars > MAX_TITLE_CHARACTERS) {
+        locateContentFail(__LINE__, "Title contained too many characterss");
     }
 
     if (contains_profanity(title)) {
@@ -1043,8 +1061,7 @@ void handle_post(struct client_info* client) {
     pointer += 2;
 
     quinter = strstr(pointer, boundary);
-    const int MAX_TEXTAREA_LENGTH = 1023;
-    if (quinter - pointer <= 2 || quinter - pointer > MAX_TEXTAREA_LENGTH) {
+    if (quinter - pointer <= 2 || quinter - pointer > MAX_COMPOSE_BYTES) {
         locateContentFail(__LINE__, NULL);
     }
 
@@ -1055,7 +1072,7 @@ void handle_post(struct client_info* client) {
             locateContentFail(__LINE__, NULL);
         }
     }
-    char textAreaBuffer[MAX_TEXTAREA_LENGTH + 1];
+    char textAreaBuffer[MAX_COMPOSE_BYTES + 1];
     for (int i = 0; i < quinter - pointer; i++) {
         textAreaBuffer[i] = pointer[i];
     }
@@ -1083,8 +1100,12 @@ void handle_post(struct client_info* client) {
         locateContentFail(__LINE__, "Empty text area");
     }
 
-    if (!is_input_kosher(textAreaBuffer, 0)) {
+    kosher_chars = num_kosher_chars(textAreaBuffer, 1);
+    if (kosher_chars <= 0) {
         locateContentFail(__LINE__, "Text area is not kosher");
+    }
+    if (kosher_chars > MAX_COMPOSE_CHARACTERS) {
+        locateContentFail(__LINE__, "Text area contained too many characters");
     }
 
     if (contains_profanity(textAreaBuffer)) {
@@ -1092,26 +1113,7 @@ void handle_post(struct client_info* client) {
     }
 
 
-    // COUNT CHARS IN TEXTAREA THEN TRUNCATE
-    const int MAX_CHAR_COUNT = 200;
-    int charCount = 0;
-    for (int i = 0; i < strlen(textAreaBuffer); i++) {
-        if (charCount == MAX_CHAR_COUNT) {
-            textAreaBuffer[i] = 0;
-            break;
-        }
-        unsigned char byte = textAreaBuffer[i]; 
-        if (byte >> 7 == 0) {
-            // ANSI character if topmost bit is 0
-            charCount++;
-            continue;
-        }
-        if (byte >> 6 == 3) {
-            // In the first byte of a unicode character the top 2 most bytes will be 1
-            printf("found unicode\n");
-            charCount++;
-        }
-    }
+    int charCount = kosher_chars;
     // END OF TRUNCATE
     int text_area_hash = hash_function(textAreaBuffer);
 
@@ -1324,8 +1326,9 @@ typedef union {
 } raw_int;
 
 // type 0 is username, recipient, title. type 1 is textarea
-// fails when emoji in username
-bool is_input_kosher(char* string, int type) {
+int num_kosher_chars(char* string, int type) {
+
+    int char_count = 0;
 
     // generates the 4 byte value of the allowed emojis
     int emojiArray[9];
@@ -1334,20 +1337,35 @@ bool is_input_kosher(char* string, int type) {
     }
     int total_emojis = 9;
     for (int i = 0; i < strlen(string); i++) {
+        if (type == 1 && char_count > MAX_COMPOSE_CHARACTERS) {
+            string[i] = 0;
+            break;
+        }
         unsigned char byte = string[i];
         if (byte >> 7 == 0) {
             // ASCII, doesn't matter if using signed or unsigned char here cause top bit is 0
             // should only allow newline when text area;
-            if ((byte < 32 || byte > 126) && (byte != '\n' || type == 0)) {
+            if ((byte < 32 || byte > 126) && ((byte != '\n' && byte != '\r') || type == 0)) {
                 printf("String had bad ascii character\n");
-                return false;
+                int k = 7;
+                for (int j = 128; j > 0; j/=2) {
+                    printf("%u", (j & byte) >> k);
+                    k--;
+                }
+                printf("\n");
+                return -1;
             }
+            if (byte == '\r' && (i + 1) < strlen(string) && string[i + 1] == '\n') {
+                printf("illegal \\r\\n in string\n");
+                return -1;
+            }
+            char_count++;
             continue;
         }
         // Unicode
         if (strlen(string) - i < 4) {
             printf("String did not have enough room for unicode emoji\n");
-            return false;
+            return -1;
         }
 
         printf("Printing bits of non-ascii char\n");
@@ -1382,11 +1400,12 @@ bool is_input_kosher(char* string, int type) {
         if (!is_in_emoji_array) {
             printf("string = %s\n", string);
             printf("String's emoji not in emoji array\n");
-            return false;
+            return -1;
         }
         i += 3;
+        char_count++;
     }
-    return true;
+    return char_count;
 }
 
 
@@ -1447,8 +1466,7 @@ struct email parse_user_file_data(char* username) {
 #endif
 // should only put kosher strings into this function
 int hash_function(char* string) {
-    const int number_of_acceptable_values = 91; // u just have 2 count them (dont forget \n)
-
+    
     unsigned char copy_string[1024];
     strcpy(copy_string, string);
     for (int i = 0; i < strlen(string); i++) {
@@ -1491,7 +1509,7 @@ int hash_function(char* string) {
         hash = ((hash << 5) + hash) + copy_string[i];
     }
     if (hash == 0) {
-        printf("hash = 0 lol\n");
+        printf("hash equaled 0, incrementing it by 1\n");
         return 1;
     }
     return hash;

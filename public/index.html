@@ -10,14 +10,15 @@
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Comic+Neue:ital,wght@0,300;0,400;0,700;1,300;1,400;1,700&display=swap');
     </style>
+</head>
 
 <body>
     <div class="container">
         <div class="topContainer">
-            <button class="hallOfFame" onclick="goToHallOfFame(event);">In Progress</button>
+            <button class="hallOfFame" onclick="goToHallOfFame(event);">Hall of Fame (doesnt work)</button>
             <div class="usernameContainer">
                 <div class="username">Username:
-                    <input class="composeInput usernameInput"></input>
+                    <input class="composeInput usernameInput" minlength="1" maxlength="15"></input>
                 </div>
             </div>
         </div>
@@ -31,16 +32,16 @@
                 <div class="composeContainer">
                     <div class="questionContainer">
                         <div class="composeQuestion recipient">To whome?:
-                            <input class="composeInput recipientInput"></input>
+                            <input class="composeInput recipientInput" minlength="1" maxlength="15"></input>
                         </div>
                     </div>
                     <div class="questionContainer">
                         <div class="composeQuestion title">Title:
-                            <input class="composeInput titleInput"></input>
+                            <input class="composeInput titleInput" minlength="1" maxlength="24"></input>
                         </div>
                     </div>
                     <div class="composeArea">
-                        <textarea class="textAreaInput"></textarea>
+                        <textarea class="textAreaInput inlength="1" maxlength="200"></textarea>
                     </div>
                     <div class="composeFooter">
                         <button class="send" onclick="sendFunction(event);">SEND</button>

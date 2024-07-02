@@ -1,5 +1,7 @@
 
-const MAX_COMPOSE_SIZE = 1000;
+const MAX_COMPOSE_SIZE = 200;
+const MAX_NAME_SIZE = 15;
+const MAX_TITLE_SIZE = 24;
 let currentUsername;
 
 document.addEventListener("click", globalClickListener);
@@ -23,11 +25,10 @@ function globalClickListener(event) {
     console.log("globalClickListener()");
     console.log(event);
     console.log(event.target);
-    
-    
+        
     closeEmojiMenuIfShould(event, "mouse");
-    
 }
+
 function globalKeyDownListener(event) {
     closeEmojiMenuIfShould(event, "keyboard");
 
@@ -127,14 +128,28 @@ function addEmojiToComposeArea(event) {
     composeInput.value = string;
 }
 
-const maxInputSize = 15;
+
 // stupid emojis count as 2 characters even though they are 4 bytes????
 function resizeInput(e) {
     console.log("resizeInput()")
     
     key = e.key;
     console.log(key);
-    if (e.target.value.length >= maxInputSize) {
+
+    const classes = e.target.className.split(' ');
+    let name = 0;
+    let title = 0;
+    for (let i = 0; i < classes.length; i++) {
+        if (classes[i] === 'recipientInput' || classes[i] === 'usernameInput') {
+            name = 1;
+            break;
+        }
+        if (classes[i] === 'titleInput') {
+            title =1;
+            break;
+        }
+    }
+    if (e.target.value.length >= (MAX_NAME_SIZE * name + MAX_TITLE_SIZE * title)) {
         if (key == "Backspace" || key == "Delete") {
             return key;
         }
@@ -143,16 +158,29 @@ function resizeInput(e) {
         }
         return false;
     }
-    e.target.style.width = (e.target.value.length +1) * 8 + 50 + "px";
-
+    e.target.style.width = (e.target.value.length +1) * .5 + 1.25 + "em";
 }
 
 function resizeInputUp(e) {
-    if (e.target.value.length >= maxInputSize) {
-        console.log("input truncated");
-        e.target.value = e.target.value.slice(0, maxInputSize);
+    const classes = e.target.className.split(' ');
+    let name = 0;
+    let title = 0;
+    for (let i = 0; i < classes.length; i++) {
+        if (classes[i] === 'recipientInput' || classes[i] === 'usernameInput') {
+            name = 1;
+            break;
+        }
+        if (classes[i] === 'titleInput') {
+            title =1;
+            break;
+        }
     }
-    e.target.style.width = (e.target.value.length +1) * 8 + 50 + "px";
+    let max = (MAX_NAME_SIZE * name + MAX_TITLE_SIZE * title);
+    if (e.target.value.length >= max) {
+        console.log("input truncated");
+        e.target.value = e.target.value.slice(0, max);
+    }
+    e.target.style.width = (e.target.value.length +1) * .5 + 2.25 + "em";
 
     // Check if should update emails
     if (e.key === 'Enter') {
