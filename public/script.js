@@ -76,8 +76,8 @@ function closeEmojiMenuIfShould(event, keyboardOrMouse) {
 }
 
 function goToHallOfFame() {
-    // go to the hall of fame page
     console.log("goToHallOfFame()");
+    location.replace("https://www.purplesite.skin/hall_of_fame");
 }
 
 function sendFunction() {

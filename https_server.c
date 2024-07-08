@@ -10,7 +10,6 @@
 // to kill a program with a certain PORT, use
 // sudo fuser -k PORT/tcp
 
-
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -39,28 +38,10 @@
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 
-#define PRINT_RECEIVED   true
-#define PRINT_FILE_TYPE  true
-#define PRINT_400        true
-#define PRINT_POST_PARSE true
-#define PRINT_HASH       true
-#define PROFANITY_PRINT  true
-#define PRINT_HASH       true
-
-#define MAX_REQUEST_SIZE 2047
-
-// struct size turns out to be about 2204 (double check), may want to pad?
-// maybe a pointer to char request would be better
-struct client_info {
-    socklen_t address_length;
-    struct sockaddr_storage address;
-    int socket;
-    SSL* ssl;
-    char request[MAX_REQUEST_SIZE + 1];
-    int received;
-    struct client_info* next;
-    int parseFailures;
-};
+#include "structs_and_macros.h"
+#include "connection_helpers.h"
+#include "send_status.h"
+#include "hash_functions.h"
 
 static struct client_info* clients = 0;
 
@@ -92,21 +73,10 @@ char* profanity_list[128] = {0};
 int profanity_hash_list[128] = {0};
 
 const char* get_content_type(const char* path);
-int create_socket(const char* host, const char* port);
-struct client_info* get_client(int socket);
-void drop_client(struct client_info* client);
-const char* get_client_address(struct client_info* ci);
-fd_set wait_on_clients(int server);
-void send_301(struct client_info* client);
-void send_400(struct client_info* client, char* string);
-void send_404(struct client_info* client);
 void serve_resource(struct client_info* client, const char* path);
 void handle_post(struct client_info* client);
 int num_kosher_chars(char* string, int type);
 struct email parse_user_file_data(char* username);
-int hash_function(char* string);
-void hash_profanity_list();
-bool contains_profanity(char* string);
 void print_client(struct client_info* client, FILE* fd);
 
 int main(int argc, char* argv[]) {
@@ -122,7 +92,7 @@ int main(int argc, char* argv[]) {
     signal(SIGPIPE, SIG_IGN);
 
     // init profanity list
-    hash_profanity_list();
+    hash_profanity_list(profanity_hash_list, profanity_list, &max_size_profanity, &min_size_profanity);
 
     // INIT OPENSSL
     SSL_library_init();
@@ -309,6 +279,7 @@ int main(int argc, char* argv[]) {
                         } else {
                             *end_path = 0;
                             serve_resource(client, path);
+                            drop_client(client);
                         }
                     } else if (strncmp("POST /", client->request, 6) == 0) {
                         handle_post(client);
@@ -490,70 +461,19 @@ fd_set wait_on_clients(int server) {
     return reads;
 }
 
-void send_301(struct client_info* client) {
-    const char* c301 = "HTTP/1.1 301 Moved Permanently\r\n"
-            "Location: https://www.purplesite.skin\r\n\r\n";
-    printf("Sent default 301:\n%s\n", c301);
-    send(client->socket, c301, strlen(c301), 0);
-    drop_client(client);
-    return;
-}
-
-#if PRINT_400 == false
-#define printf(...)
-#endif
-void send_400(struct client_info* client, char* string) {
-    if (string == NULL || strlen(string) == 0) {
-        const char* c400 = "HTTP/1.1 400 Bad Request\r\n"
-            "Connection: close\r\n"
-            "Content-Length: 11\r\n\r\nBad Request";
-        printf("Sent default 400:\n%s\n", c400);
-        SSL_write(client->ssl, c400, strlen(c400));
-        drop_client(client);
-        return;
-    }
-    const char* beginningString = "HTTP/1.1 400 ";
-    const char* endingString = "Connection: close\r\n"
-            "Content-Length: 0\r\n\r\n";
-    if (strlen(string) + strlen(beginningString) + strlen(endingString) > 253) {
-        printf("string was to large, got chopped\n");
-        string[253 - strlen(beginningString) - strlen(endingString)] = 0;
-    }
-    char c400[256] = {0};
-    strcpy(c400, beginningString);
-
-    char* pointer = c400 + strlen(beginningString);
-    for (int i = 0; i < strlen(string); i++) {
-        *pointer = string[i];
-        pointer++;
-    }
-    strncpy(pointer, "\r\n", 2);
-    pointer += 2;
-
-    strcpy(pointer, endingString);
-
-    SSL_write(client->ssl, c400, 256);
-    drop_client(client);
-    printf("Sent custom 400:\n%s\n", c400);
-}
-#if PRINT_400 == false
-#undef printf
-#endif
-
-void send_404(struct client_info* client) {
-    const char* c404 = "HTTP/1.1 404 Not Found\r\n"
-        "Connection: close\r\n"
-        "content-Length: 9\r\n\r\nNot Found";
-    //send(client->socket, c404, strlen(c404), 0);
-    SSL_write(client->ssl, c404, strlen(c404));
-    drop_client(client);
-}
-
 void serve_resource(struct client_info* client, const char* path) {
 
     printf("serve_resource() %s %s\n", get_client_address(client), path);
 
     if (strcmp(path, "/") == 0) path = "/index.html";
+
+    if (strcmp(path, "/hall_of_fame") == 0) {
+        printf("Recursing chat\n");
+        serve_resource(client, "/hall_of_fame/index.html");
+        serve_resource(client, "/hall_of_fame/styles.css");
+        serve_resource(client, "/hall_of_fame/favicon.ico");
+        return;
+    }
 
     if (strlen(path) > 100) {
         printf("Path > 100\n");
@@ -567,6 +487,7 @@ void serve_resource(struct client_info* client, const char* path) {
         return;
     }
 
+    //Huh?
     if (strstr(path, "public") != 0) {
         printf("sussy request\n");
         send_404(client);
@@ -623,7 +544,6 @@ void serve_resource(struct client_info* client, const char* path) {
     }
 
     fclose(fp);
-    drop_client(client);
 }
 
 #if PRINT_POST_PARSE == false
@@ -856,7 +776,7 @@ void handle_post(struct client_info* client) {
         locateContentFail(__LINE__, "Username contained too many characterss");
     }
 
-    if (contains_profanity(username)) {
+    if (contains_profanity(username, profanity_hash_list, profanity_list, &max_size_profanity, &min_size_profanity)) {
         locateContentFail(__LINE__, "Username has swears );");
     }
 
@@ -965,7 +885,7 @@ void handle_post(struct client_info* client) {
         locateContentFail(__LINE__, "Recipient contained too many characterss");
     }
 
-    if (contains_profanity(recipient)) {
+    if (contains_profanity(recipient, profanity_hash_list, profanity_list, &max_size_profanity, &min_size_profanity)) {
         locateContentFail(__LINE__, "Recipient has swears );");
     }
 
@@ -1038,7 +958,7 @@ void handle_post(struct client_info* client) {
         locateContentFail(__LINE__, "Title contained too many characterss");
     }
 
-    if (contains_profanity(title)) {
+    if (contains_profanity(title, profanity_hash_list, profanity_list, &max_size_profanity, &min_size_profanity)) {
         locateContentFail(__LINE__, "Title has swears );");
     }
 
@@ -1108,7 +1028,7 @@ void handle_post(struct client_info* client) {
         locateContentFail(__LINE__, "Text area contained too many characters");
     }
 
-    if (contains_profanity(textAreaBuffer)) {
+    if (contains_profanity(textAreaBuffer, profanity_hash_list, profanity_list, &max_size_profanity, &min_size_profanity)) {
         locateContentFail(__LINE__, "Text area has swears );");
     }
 
@@ -1461,135 +1381,7 @@ struct email parse_user_file_data(char* username) {
     */
 }
 
-#if PRINT_HASH == false
-#define printf(...) 
-#endif
-// should only put kosher strings into this function
-int hash_function(char* string) {
-    
-    unsigned char copy_string[1024];
-    strcpy(copy_string, string);
-    for (int i = 0; i < strlen(string); i++) {
-        copy_string[i] = tolower(copy_string[i]);
-    }
-    printf("hash_function() received: %s\n", copy_string);
-    int hash = 5381;
-    for (int i = 0; i < strlen(string); i++) {
 
-        printf("hash = %d\n", hash);
-        printf("profanity_hash[0] = %d\n", profanity_hash_list[0]);
-        // if emoji
-        if (copy_string[i] >> 7 == 1) {
-            printf("hash_function() detected emoji\n");
-            hash = ((hash << 5) + hash) + 'o';
-            i += 3;
-            continue;
-        }
-        bool shouldSkip = false;
-        switch(copy_string[i]) {
-            case ' ': shouldSkip = true; break;
-            case '_': shouldSkip = true; break;
-            case '(': if (i + 1 < strlen(string) && copy_string[i+1] == ')') {
-                hash = ((hash << 5) + hash) + 'o';
-                i++;
-                shouldSkip = true;
-                } break;
-            case '0': copy_string[i] = 'o'; break;
-            case '@': copy_string[i] = 'a'; break;
-            case 'i': copy_string[i] = 'l'; break;
-            case '|': copy_string[i] = 'l'; break;
-            case '!': copy_string[i] = 'l'; break;
-            case '3': copy_string[i] = 'e'; break;
-            case '$': copy_string[i] = 's'; break;
-            default: break;
-        }
-        if (shouldSkip) {
-            continue;
-        }
-        hash = ((hash << 5) + hash) + copy_string[i];
-    }
-    if (hash == 0) {
-        printf("hash equaled 0, incrementing it by 1\n");
-        return 1;
-    }
-    return hash;
-}
-#if PRINT_HASH == false
-#undef printf
-#endif
-
-#if PROFANITY_PRINT == false
-#define printf
-#endif
-void hash_profanity_list() {
-    printf("\nPRINTING PROFANITY\n");
-    FILE* file = fopen("profanity.txt", "r");
-    char line[64];
-    int iter = 0;
-    while (fgets(line, 64, file)) {
-        profanity_list[iter++] = line;
-        int size = strlen(line);
-        printf("strlen(line) = %d\n", size);
-        printf("max_size_profanity = %d\n", max_size_profanity);
-        if (strlen(line) < min_size_profanity) {
-            min_size_profanity = strlen(line);
-        }
-        if (size > max_size_profanity) {
-            max_size_profanity = size;
-            printf("max_size_profanity changed to %d\n", size);
-        }
-        printf("added %s to profanity list\n", line);
-    }
-    fclose(file);
-
-    iter = 0;
-    while (profanity_list[iter] != 0) {
-        profanity_hash_list[iter] = hash_function(profanity_list[iter]);
-        printf("hashed %s as %d\n", profanity_list[iter], profanity_hash_list[iter]);
-        iter++;
-    }
-    printf("DONE ADDING PROFANITY\n\n");
-}
-
-// should only give string with length 1023, last byte is for 0
-// ONCE FOUND HASHES THAT MATCH CHECK TO MAKE SURE IT ACTUALLY IS PROFANITY
-bool contains_profanity(char* string) {
-    char bad_msg_buffer[1024] = {0};
-    strcpy(bad_msg_buffer, string);
-    static char temp[1024] = {0};
-    int pointer;
-    int quinter;
-    //printf("min_size_profanity = %d\n", min_size_profanity);
-    //printf("max_size_profanity = %d\n", max_size_profanity);
-    for (int i = min_size_profanity; i <= max_size_profanity * 2; i++) {
-        //printf("in for loop\n");
-        pointer = 0;
-        quinter = i;
-        while (quinter <= strlen(bad_msg_buffer)) {
-            //printf("in while loop\n");
-            strcpy(temp, bad_msg_buffer);
-            temp[quinter + 1] = 0;
-            int hash = hash_function(temp + pointer);
-            //printf("hash = %d\n", hash);
-            int j = 0;
-            while (profanity_hash_list[j] != 0) {
-                if (hash == profanity_hash_list[j]) {
-                    printf("hash = %d: profanity hash = %d\n", hash, profanity_hash_list[j]);
-                    printf("profanity found = %s\n", profanity_list[j]);
-                    return true;
-                }
-                j++;
-            }
-            pointer++;
-            quinter++;
-        }
-    }
-    return false;
-}
-
-#if PROFANITY_PRINT == false
-#undef printf
-#endif
 
 void print_client(struct client_info* client, FILE* fd) {
 

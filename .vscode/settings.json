@@ -1,0 +1,6 @@
+{
+    "files.associations": {
+        "structs_and_macros.h": "c",
+        "stdbool.h": "c"
+    }
+}
