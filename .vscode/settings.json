@@ -1,6 +1,8 @@
 {
     "files.associations": {
         "structs_and_macros.h": "c",
-        "stdbool.h": "c"
+        "stdbool.h": "c",
+        "connection_helpers.h": "c",
+        "send_status.h": "c"
     }
 }

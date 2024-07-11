@@ -6,6 +6,8 @@
 #define MAX_COMPOSE_CHARACTERS  200
 #define MAX_COMPOSE_BYTES       MAX_COMPOSE_CHARACTERS * 4
 
+const char* DELIMITER = "\'\'\n";
+
 
 // to kill a program with a certain PORT, use
 // sudo fuser -k PORT/tcp
@@ -55,16 +57,6 @@ struct email {
     int upvotes;
     time_t creationDate;
 };
-
-/*
-struct user_data {
-    char name[16];
-    // make just a giant blob
-    struct email* emails;
-};
-struct user_date* users;
-*/
-
 
 int min_size_profanity = 999;
 int max_size_profanity = -1;
@@ -143,15 +135,18 @@ int main(int argc, char* argv[]) {
         exit(1);
     }
 
+    printf("Before main clients = %p\n", clients);
+
     // MAIN LOOP
     while (true) {
         
         fd_set reads;
-        reads = wait_on_clients(server);
+        reads = wait_on_clients(server, &clients);
+        printf("After wait_on_clients() clients = %p\n", clients);
 
         // use poll() instead
         /*fd_set http_reads;
-        http_reads = wait_on_clients(http);
+        http_reads = wait_on_clients(http, &clients);
         struct timeval timeout;
         timeout.tv_sec = 10;
         timeout.tv_usec = 0;
@@ -174,7 +169,8 @@ int main(int argc, char* argv[]) {
 
         if (FD_ISSET(server, &reads)) {
 
-            struct client_info* client = get_client(-1);
+            struct client_info* client = get_client(-1, &clients);
+            printf("After get_client() clients = %p\n", clients);
 
             client->socket = accept(server,
                         (struct sockaddr*) &client->address,
@@ -210,28 +206,31 @@ int main(int argc, char* argv[]) {
             // SSL_accept probably blocks, use a thread to accept?
             int accept_return_code = SSL_accept(client->ssl);
             if (accept_return_code <= 0) {
-                fprintf(stderr, "%s: SSL_accept() failed.\n", get_client_address(client));
+                fprintf(stderr, "%s: SSL_accept() failed.\n", get_client_address(&client));
                 ERR_print_errors_fp(stderr);
 
                 int error_code = SSL_get_error(client->ssl, accept_return_code);
                 printf("ERRORNUM = %d\n", error_code);
                 switch(error_code) {
-                    case 5 /*http request*/: send_301(client); break;
-                    default: drop_client(client); break;
+                    case 5 /*http request*/: send_301(client, &clients); break;
+                    default: drop_client(client, &clients); break;
                 }
 
             } else {
-                printf("New connection from %s.\n", get_client_address(client));
+                printf("New connection from %s.\n", get_client_address(&client));
                 printf("SSL connection using %s\n", SSL_get_cipher(client->ssl));
             }
         }
 
         struct client_info* client = clients;
+        printf("Starting client = %p\n", client);
         while (client != NULL) {
+            printf("Client is not null\n");
             
             struct client_info* next = client->next;
 
             if (FD_ISSET(client->socket, &reads)) {
+                printf("Reading data from a client\n");
 
                 // Skips client if getsockopt() returns an error, dies if getsockopt() failed
                 // maybe should handle error
@@ -249,7 +248,7 @@ int main(int argc, char* argv[]) {
                 }
 
                 if (MAX_REQUEST_SIZE == client->received) {
-                    send_400(client, NULL);
+                    send_400(client, &clients, NULL);
                     continue;
                 }
 
@@ -261,8 +260,8 @@ int main(int argc, char* argv[]) {
                 #endif
 
                 if (bytes_read < 1) {
-                    printf("Unexpected disconnect from %s.\n", get_client_address(client));
-                    drop_client(client);
+                    printf("Unexpected disconnect from %s.\n", get_client_address(&client));
+                    drop_client(client, &clients);
                     continue;
                 }
                 client->received += bytes_read;
@@ -275,16 +274,16 @@ int main(int argc, char* argv[]) {
                         char* path = client->request + 4;
                         char* end_path = strstr(path, " ");
                         if (!end_path) {
-                            send_400(client, NULL);
+                            send_400(client, &clients, NULL);
                         } else {
                             *end_path = 0;
                             serve_resource(client, path);
-                            drop_client(client);
+                            drop_client(client, &clients);
                         }
                     } else if (strncmp("POST /", client->request, 6) == 0) {
                         handle_post(client);
                     } else {
-                        send_400(client, NULL);
+                        send_400(client, &clients, NULL);
                     }
                 }
             }
@@ -295,7 +294,7 @@ int main(int argc, char* argv[]) {
 
     printf("\nClosing server...\n");
     // while might be buggy, untested
-    while (clients) drop_client(clients);
+    while (clients) drop_client(clients, &clients);
     SSL_CTX_free(ctx);
     close(server);
     printf("Finished.\n");
@@ -334,136 +333,9 @@ const char* get_content_type(const char* path) {
     return type;
 }
 
-int create_socket(const char* host, const char* port) {
-
-    printf("Configuring local address...\n");
-    struct addrinfo hints;
-    memset(&hints, 0, sizeof(hints));
-    hints.ai_family = AF_INET;
-    hints.ai_socktype = SOCK_STREAM;
-    hints.ai_flags = AI_PASSIVE;
-
-    struct addrinfo* bind_address;
-    getaddrinfo(host, port, &hints, &bind_address);
-
-    printf("Creating socket...\n");
-    int socket_listen;
-    socket_listen = socket(bind_address->ai_family, bind_address->ai_socktype, bind_address->ai_protocol);
-    if (socket_listen < 0) {
-        fprintf(stderr, "socket() failed. (%d, %s).\n", errno, strerror(errno));
-        exit(1);
-    }
-
-    // Lets you reuse a port if it was recently in use (claims it from OS)
-    int yes = 1;
-    if (setsockopt(socket_listen, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes)) == -1) {
-        perror("setsockopt error\n");
-        exit(1);
-    }
-    
-    printf("Binding socket to local address...\n");
-    if (bind(socket_listen,
-            bind_address->ai_addr, bind_address->ai_addrlen)) {
-        fprintf(stderr, "bind() failed. (%d, %s).\n", errno, strerror(errno));
-        exit(1);
-    }  
-    freeaddrinfo(bind_address);
-
-    printf("Listening...\n");
-    if (listen(socket_listen, 10) < 0) {
-        fprintf(stderr, "listen() failed. (%d, %s).\n", errno, strerror(errno));
-        exit(1);
-    }
-
-    return socket_listen;
-}
-
-struct client_info* get_client(int socket) {
-
-    struct client_info* ci = clients;
-
-    while (ci) {
-        if (ci->socket == socket) break;
-        ci = ci->next;
-    }
-    if (ci) return ci;
-
-    struct client_info* new = (struct client_info*) calloc(1, sizeof(struct client_info));
-
-    if (!new) {
-        fprintf(stderr, "Out of memory.\n");
-        exit(1);
-    }
-
-    new->address_length = sizeof(new->address);
-    new->next = clients;
-    clients = new;
-    new->parseFailures = 0;
-    return new;
-}
-
-void drop_client(struct client_info* client) {
-
-    SSL_shutdown(client->ssl);
-    close(client->socket);
-    SSL_free(client->ssl);
-
-    struct client_info** pointer = &clients;
-
-    while (*pointer) {
-        if (*pointer == client) {
-            *pointer = client->next;
-            // client = client->next?? equivalent?
-            free(client);
-            return;
-        }
-        pointer = &(*pointer)->next;
-    }
-
-    fprintf(stderr, "drop_client(). Client not found.\n");
-    exit(1);
-}
-
-const char* get_client_address(struct client_info* ci) {
-
-    // static might create problems with multuihreading
-    static char address_buffer[100];
-    getnameinfo((struct sockaddr*) &ci->address,
-            ci->address_length,
-            address_buffer, sizeof(address_buffer), 0, 0,
-            NI_NUMERICHOST);
-    return address_buffer;
-}
-
-fd_set wait_on_clients(int server) {
-    fd_set reads;
-    FD_ZERO(&reads);
-    FD_SET(server, &reads);
-    int max_socket = server;
-
-    struct client_info* ci = clients;
-
-    while (ci) {
-        FD_SET(ci->socket, &reads);
-        if (ci->socket > max_socket)
-            max_socket = ci->socket;
-        ci = ci->next;
-    }
-
-    struct timeval timeout;
-    timeout.tv_sec = 20;
-    timeout.tv_usec = 0;
-    if (select(max_socket + 1, &reads, 0, 0, &timeout) < 0) {
-        fprintf(stderr, "select() failed. (%d, %s)\n", errno, strerror(errno));
-        exit(1);
-    }
-
-    return reads;
-}
-
 void serve_resource(struct client_info* client, const char* path) {
 
-    printf("serve_resource() %s %s\n", get_client_address(client), path);
+    printf("serve_resource() %s %s\n", get_client_address(&client), path);
 
     if (strcmp(path, "/") == 0) path = "/index.html";
 
@@ -477,20 +349,20 @@ void serve_resource(struct client_info* client, const char* path) {
 
     if (strlen(path) > 100) {
         printf("Path > 100\n");
-        send_400(client, NULL);
+        send_400(client, &clients, NULL);
         return;
     }
 
     if (strstr(path, "..")) {
         printf("Path contained ..\n");
-        send_404(client);
+        send_404(client, &clients);
         return;
     }
 
     //Huh?
     if (strstr(path, "public") != 0) {
         printf("sussy request\n");
-        send_404(client);
+        send_404(client, &clients);
         return;
     }
 
@@ -498,11 +370,11 @@ void serve_resource(struct client_info* client, const char* path) {
     sprintf(full_path, "public%s", path);
     
     
-    FILE* fp = fopen(full_path, "rb");
+    FILE* fp = fopen(full_path, "rba");
 
     if (fp == NULL) {
         printf("File failed to open, full_path = %s. Errno = %d, errstr = %s\n", full_path, errno, strerror(errno));
-        send_404(client);
+        send_404(client, &clients);
         return;
     }
     
@@ -559,7 +431,7 @@ void handle_post(struct client_info* client) {
 
     if (strncmp(client->request, "POST / HTTP/1.1\r\n", 17) != 0) {
         printf("First post line malformed\n");
-        send_400(client, NULL);
+        send_400(client, &clients, NULL);
         return;
     }
 
@@ -568,7 +440,7 @@ void handle_post(struct client_info* client) {
     char* quinter;
     // FIND CONTENT LENGTH
     #define contentLengthFail(x) printf("Failed to parse content length. Line %d\n", x); \
-        send_400(client, NULL); \
+        send_400(client, &clients, NULL); \
         return
 
     while (strncmp(pointer, "Content-Length: ", 16) != 0) {
@@ -609,7 +481,7 @@ void handle_post(struct client_info* client) {
 
     // FIND CONTENT TYPE
     #define contentTypeFail(x) printf("Failed to parse content type. Line %d\n", x); \
-        send_400(client, NULL); \
+        send_400(client, &clients, NULL); \
         return
     
     while (strncmp(pointer, "Content-Type: ", 14) != 0) {
@@ -649,7 +521,7 @@ void handle_post(struct client_info* client) {
 
     // FIND BOUNDRY
     #define boundaryFail(x) printf("Failed to parse boundry. Line %d\n", x); \
-        send_400(client, NULL); \
+        send_400(client, &clients, NULL); \
         return
 
     if (pointer >= end) {
@@ -682,7 +554,7 @@ void handle_post(struct client_info* client) {
             client->parseFailures += 1; \
             return; \
         }\
-        send_400(client, y); \
+        send_400(client, &clients, y); \
         return
 
     // GET USERNAME ///////////////////////////////////////////////
@@ -755,7 +627,7 @@ void handle_post(struct client_info* client) {
 
     if (quinter - pointer - whiteSpaceCount <= 0) {
         printf("Received empty username\n");
-        send_400(client, "Empty username");
+        send_400(client, &clients, "Empty username");
         return;
     }
     username[quinter - pointer - whiteSpaceCount] = 0;
@@ -763,7 +635,7 @@ void handle_post(struct client_info* client) {
     // Check if username string is empty
     if (strlen(username) == 0) {
         printf("Received empty username\n");
-        send_400(client, "Empty username");
+        send_400(client, &clients, "Empty username");
         return;
     }
 
@@ -832,7 +704,7 @@ void handle_post(struct client_info* client) {
 
     if (quinter - pointer - whiteSpaceCount <= 0) {
         printf("Received empty recipient\n");
-        send_400(client, "Empty recipient");
+        send_400(client, &clients, "Empty recipient");
         return;
     }
     recipient[quinter - pointer - whiteSpaceCount] = 0;
@@ -840,7 +712,7 @@ void handle_post(struct client_info* client) {
     // Check if recipient string is empty
     if (strlen(recipient) == 0) {
         printf("Received empty recipient\n");
-        send_400(client, "Empty recipient");
+        send_400(client, &clients, "Empty recipient");
         return;
     }
 
@@ -938,7 +810,7 @@ void handle_post(struct client_info* client) {
 
     if (quinter - pointer - whiteSpaceCount <= 0) {
         printf("Received empty title\n");
-        send_400(client, "Empty title");
+        send_400(client, &clients, "Empty title");
         return;
     }
     title[quinter - pointer - whiteSpaceCount] = 0;
@@ -946,7 +818,7 @@ void handle_post(struct client_info* client) {
     // Check if title string is empty
     if (strlen(title) == 0) {
         printf("Received empty title\n");
-        send_400(client, "Empty title");
+        send_400(client, &clients, "Empty title");
         return;
     }
 
@@ -1011,7 +883,7 @@ void handle_post(struct client_info* client) {
 
     if (quinter - pointer - whiteSpaceCount <= 0) {
         printf("Received empty text area\n");
-        send_400(client, "Empty text area");
+        send_400(client, &clients, "Empty text area");
         return;
     }
     textAreaBuffer[quinter - pointer - whiteSpaceCount] = 0;
@@ -1183,10 +1055,12 @@ void handle_post(struct client_info* client) {
     printf("time created = %ld\n", rawtime);
     new_email.creationDate = rawtime;
 
-    fwrite("\r\nrecipient: ", 13, 1, file);
+    fwrite(DELIMITER, strlen(DELIMITER), 1, file);
+    fwrite("recipient: ", 11, 1, file);
     fwrite(recipient, strlen(recipient), 1, file);
     
-    fwrite("\r\nhash: ", 8, 1, file);
+    fwrite(DELIMITER, strlen(DELIMITER), 1, file);
+    fwrite("hash: ", 6, 1, file);
     char hash_as_string[32 + 1];
     int temp = text_area_hash;
     int count = 0;
@@ -1197,14 +1071,19 @@ void handle_post(struct client_info* client) {
     sprintf(hash_as_string, "%d", text_area_hash);
     fwrite(hash_as_string, count, 1, file);
 
-    fwrite("\r\nsender: ", 10, 1, file);
+    fwrite(DELIMITER, strlen(DELIMITER), 1, file);
+    fwrite("sender: ", 8, 1, file);
     fwrite(username, strlen(username), 1, file);
-    fwrite("\r\ntitle: ", 9, 1, file);
+    fwrite(DELIMITER, strlen(DELIMITER), 1, file);
+    fwrite("title: ", 7, 1, file);
     fwrite(title, strlen(title), 1, file);
-    fwrite("\r\nbody: ", 8, 1, file);
+    fwrite(DELIMITER, strlen(DELIMITER), 1, file);
+    fwrite("body: ", 6, 1, file);
     fwrite(textAreaBuffer, strlen(textAreaBuffer), 1, file);
-    fwrite("\r\nupvotes: 0", 12, 1, file);
-    fwrite("\r\ntime created: ", 16, 1, file);
+    fwrite(DELIMITER, strlen(DELIMITER), 1, file);
+    fwrite("upvotes: 0", 10, 1, file);
+    fwrite(DELIMITER, strlen(DELIMITER), 1, file);
+    fwrite("time created: ", 14, 1, file);
     char time_as_string[64 + 1];
     long l_temp = rawtime;
     count = 0;
@@ -1214,8 +1093,9 @@ void handle_post(struct client_info* client) {
     }
     sprintf(time_as_string, "%ld", rawtime);
     fwrite(time_as_string, count, 1, file);
-    fwrite("\r\n\r\n", 4, 1, file);
-
+    
+    fwrite(DELIMITER, strlen(DELIMITER), 1, file);
+    fwrite(DELIMITER, strlen(DELIMITER), 1, file);
 
     fclose(file);
 
@@ -1234,7 +1114,7 @@ void handle_post(struct client_info* client) {
     sprintf(buffer, "\r\n");
     SSL_write(client->ssl, buffer, strlen(buffer));
 
-    drop_client(client);
+    drop_client(client, &clients);
 }
 #if PRINT_POST_PARSE == false
 #undef printf
@@ -1275,10 +1155,23 @@ int num_kosher_chars(char* string, int type) {
                 printf("\n");
                 return -1;
             }
-            if (byte == '\r' && (i + 1) < strlen(string) && string[i + 1] == '\n') {
-                printf("illegal \\r\\n in string\n");
-                return -1;
+            if (i + strlen(DELIMITER) - 1 < strlen(string)) {
+                bool contains_delimiter = true;
+                for (int j = 0; j < strlen(DELIMITER); j++) {
+                    if (string[i + j] != DELIMITER[j]) {
+                        contains_delimiter = false;
+                        break;
+                    }
+                }
+                if (contains_delimiter) {
+                    printf("string illegally contains delimter \"%s\"", DELIMITER);
+                    return -1;
+                }
             }
+            //if (byte == '\r' && (i + 1) < strlen(string) && string[i + 1] == '\n') {
+            //    printf("illegal \\r\\n in string\n");
+            //    return -1;
+            //}
             char_count++;
             continue;
         }
@@ -1335,7 +1228,7 @@ struct email parse_user_file_data(char* username) {
 
     if (fp == NULL) {
         printf("File failed to open, full_path = %s. Errno = %d, errstr = %s\n", full_path, errno, strerror(errno));
-        send_404(client);
+        send_404(client, &clients);
         return;
     }
     
@@ -1377,7 +1270,7 @@ struct email parse_user_file_data(char* username) {
     }
 
     fclose(fp);
-    drop_client(client);
+    drop_client(client, &clients);
     */
 }
 
@@ -1387,7 +1280,7 @@ void print_client(struct client_info* client, FILE* fd) {
 
     fprintf(fd, "address_length = %d\n", client->address_length);
     //printf("raw address = %ld\n", client->address);
-    fprintf(fd, "address = %s", get_client_address(client));
+    fprintf(fd, "address = %s", get_client_address(&client));
     fprintf(fd, "socket = %d\n", client->socket);
     fprintf(fd, "parseFailures = %d\n", client->parseFailures);
 }

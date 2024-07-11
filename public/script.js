@@ -1,8 +1,12 @@
 
-const MAX_COMPOSE_SIZE = 200;
-const MAX_NAME_SIZE = 15;
-const MAX_TITLE_SIZE = 24;
+const MAX_NAME_CHARACTERS = 15;
+const MAX_TITLE_CHARACTERS = 24;
+const MAX_COMPOSE_CHARACTERS = 200;
+const DELIMITER = "\'\'\n";
 let currentUsername;
+
+const DEBUG_GENERIC = false;
+const DEBUG_EMAILS = false;
 
 document.addEventListener("click", globalClickListener);
 document.addEventListener("keydown", globalKeyDownListener);
@@ -117,7 +121,7 @@ function addEmojiToComposeArea(event) {
     const composeInput = document.querySelector('.textAreaInput')
     let string = "";
     if (composeInput.value !== null) {
-        if (composeInput.value.length >= MAX_COMPOSE_SIZE) {
+        if (composeInput.value.length >= MAX_COMPOSE_CHARACTERS) {
             return;
         }
         string = composeInput.value + event.target.textContent;
@@ -149,7 +153,7 @@ function resizeInput(e) {
             break;
         }
     }
-    if (e.target.value.length >= (MAX_NAME_SIZE * name + MAX_TITLE_SIZE * title)) {
+    if (e.target.value.length >= (MAX_NAME_CHARACTERS * name + MAX_TITLE_CHARACTERS * title)) {
         if (key == "Backspace" || key == "Delete") {
             return key;
         }
@@ -175,7 +179,7 @@ function resizeInputUp(e) {
             break;
         }
     }
-    let max = (MAX_NAME_SIZE * name + MAX_TITLE_SIZE * title);
+    let max = (MAX_NAME_CHARACTERS * name + MAX_TITLE_CHARACTERS * title);
     if (e.target.value.length >= max) {
         console.log("input truncated");
         e.target.value = e.target.value.slice(0, max);
@@ -260,24 +264,25 @@ function updateEmails(emails) {
     console.log("current user = " + currentUsername);
     while (true) {
         console.log("ADDING EMAIL");
+
         // RECIPIENT
-        let recipientIndex = emails.match("\r\nrecipient: ");
+        let recipientIndex = emails.match(DELIMITER + "recipient: ");
         if (recipientIndex === null) {
             console.log("Done finding emails");
             break;
         }
         recipientIndex = recipientIndex.index;
-        //console.log("recipientIndex =  " + recipientIndex);
-        recipientIndex += 13;
+        DEBUG_EMAILS&&console.log("recipientIndex =  " + recipientIndex);
+        recipientIndex += 11 + DELIMITER.length;
         emails = emails.slice(recipientIndex, emails.length);
-        end = emails.match("\r\n");
+        end = emails.match(DELIMITER);
         if (end === null) {
             console.log("failed to find recipient end (BAD)");
             break;
         }
         end = end.index;
-        //console.log("endIndex =  " + end);
-        inputRecipient= emails.slice(0, end);
+        DEBUG_EMAILS&&console.log("endIndex =  " + end);
+        inputRecipient = emails.slice(0, end);
         console.log("recipient: " + inputRecipient);
         emails = emails.slice(end, emails.length);
         if (inputRecipient != currentUsername) {
@@ -285,8 +290,8 @@ function updateEmails(emails) {
             continue;
         }
 
-        // HASH (dont need for this)
-        let hashIndex = emails.match("\r\nhash: ");
+        // HASH (dont need this right now, i guess)
+        let hashIndex = emails.match(DELIMITER + "hash: ");
         if (hashIndex === null) {
             console.log("failed to find hash (BAD)");
             break;
@@ -295,16 +300,16 @@ function updateEmails(emails) {
         //console.log("hashIndex = " + hashIndex);
 
         // SENDER
-        let senderIndex = emails.match("\r\nsender: ");
+        let senderIndex = emails.match(DELIMITER + "sender: ");
         if (senderIndex === null) {
             console.log("failed to find sender (BAD)");
             break;
         }
         senderIndex = senderIndex.index;
         //console.log("senderIndex =  " + senderIndex);
-        senderIndex += 10;
+        senderIndex += 8 + DELIMITER.length;
         emails = emails.slice(senderIndex, emails.length);
-        end = emails.match("\r\n");
+        end = emails.match(DELIMITER);
         if (end === null) {
             console.log("failed to find sender end (BAD)");
             break;
@@ -317,16 +322,16 @@ function updateEmails(emails) {
         
 
         // TITLE
-        let titleIndex = emails.match("\r\ntitle: ");
+        let titleIndex = emails.match(DELIMITER + "title: ");
         if (titleIndex === null) {
             console.log("failed to find title (BAD)");
             break;
         }
         titleIndex = titleIndex.index;
         //console.log("titleIndex =  " + titleIndex);
-        titleIndex += 9;
+        titleIndex += 7 + DELIMITER.length;
         emails = emails.slice(titleIndex, emails.length);
-        end = emails.match("\r\n");
+        end = emails.match(DELIMITER);
         if (end === null) {
             console.log("failed to find title end (BAD)");
             break;
@@ -340,16 +345,16 @@ function updateEmails(emails) {
         console.log("emails after title:\n" + emails);
 
         // BODY
-        let bodyIndex = emails.match("\r\nbody: ");
+        let bodyIndex = emails.match(DELIMITER + "body: ");
         if (bodyIndex === null) {
             console.log("failed to find body (BAD)");
             break;
         }
         bodyIndex = bodyIndex.index;
         //console.log("bodyIndex =  " + bodyIndex);
-        bodyIndex += 8;
+        bodyIndex += 6 + DELIMITER.length;
         emails = emails.slice(bodyIndex, emails.length);
-        end = emails.match("\r\n");
+        end = emails.match(DELIMITER);
         if (end === null) {
             console.log("failed to find body end (BAD)");
             break;
@@ -363,16 +368,16 @@ function updateEmails(emails) {
         console.log("emails after body:\n" + emails);
 
         // UPVOTES
-        let upvotesIndex = emails.match("\r\nupvotes: ");
+        let upvotesIndex = emails.match(DELIMITER + "upvotes: ");
         if (upvotesIndex === null) {
             console.log("failed to find upvotes (BAD)");
             break;
         }
         upvotesIndex = upvotesIndex.index;
         //console.log("upvotesIndex =  " + upvotesIndex);
-        upvotesIndex += 11;
+        upvotesIndex += 9 + DELIMITER.length;
         emails = emails.slice(upvotesIndex, emails.length);
-        end = emails.match("\r\n");
+        end = emails.match(DELIMITER);
         if (end === null) {
             console.log("failed to find upvotes end (BAD)");
             break;
