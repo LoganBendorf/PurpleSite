@@ -4,8 +4,11 @@
 
 #include <sys/socket.h>
 #include <openssl/ssl.h>
+#include <stdbool.h>
 
 // Toggles
+#define PRINT_CLIENTS_AFTER_FUNC    false
+#define PRINT_FUNC_START false
 #define PRINT_RECEIVED   true
 #define PRINT_FILE_TYPE  true
 #define PRINT_400        true
@@ -17,7 +20,7 @@
 
 #define MAX_REQUEST_SIZE 2047
 
-// struct size turns out to be about 2204 (double check), may want to pad?
+// struct size turns out to be about 2204 (double check)
 // maybe a pointer to char request would be better
 struct client_info {
     socklen_t address_length;

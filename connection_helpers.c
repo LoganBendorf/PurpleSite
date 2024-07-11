@@ -6,8 +6,10 @@
 #include <errno.h>
 
 #include <sys/types.h>
+#include <sys/select.h> // for pselect()
 #include <netdb.h>
 #include <unistd.h>
+#include <signal.h>
 
 
 int create_socket(const char* host, const char* port) {
@@ -55,7 +57,9 @@ int create_socket(const char* host, const char* port) {
 }
 
 struct client_info* get_client(int socket, struct client_info** clientsPtr) {
+    #if PRINT_FUNC_START == true
     printf("Getting client\n");
+    #endif
 
     struct client_info* clients = *clientsPtr;
 
@@ -84,7 +88,9 @@ struct client_info* get_client(int socket, struct client_info** clientsPtr) {
 }
 
 void drop_client(struct client_info* client, struct client_info** clientsPtr) {
+    #if PRINT_FUNC_START == true
     printf("Dropping client\n");
+    #endif
 
     SSL_shutdown(client->ssl);
     close(client->socket);
@@ -122,7 +128,10 @@ const char* get_client_address(struct client_info** clientPtr) {
 }
 
 fd_set wait_on_clients(int server, struct client_info** clientsPtr) {
+    #if PRINT_FUNC_START == true
     printf("Waiting\n");
+    #endif
+
     fd_set reads;
     FD_ZERO(&reads);
     FD_SET(server, &reads);
@@ -139,10 +148,15 @@ fd_set wait_on_clients(int server, struct client_info** clientsPtr) {
         client = client->next;
     }
 
-    struct timeval timeout;
+    sigset_t sigmask;
+    sigemptyset(&sigmask);
+    sigaddset(&sigmask, SIGINT);
+
+    // pselect() uses timespec insead of timeval
+    struct timespec timeout;
     timeout.tv_sec = 20;
-    timeout.tv_usec = 0;
-    if (select(max_socket + 1, &reads, 0, 0, &timeout) < 0) {
+    timeout.tv_nsec = 0;
+    if (pselect(max_socket  + 1, &reads, 0, 0, &timeout, &sigmask) < 0) {
         fprintf(stderr, "select() failed. (%d, %s)\n", errno, strerror(errno));
         exit(1);
     }

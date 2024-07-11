@@ -3,6 +3,9 @@
         "structs_and_macros.h": "c",
         "stdbool.h": "c",
         "connection_helpers.h": "c",
-        "send_status.h": "c"
+        "send_status.h": "c",
+        "ssl.h": "c",
+        "types.h": "c",
+        "unistd.h": "c"
     }
 }

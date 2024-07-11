@@ -50,14 +50,15 @@ static struct client_info* clients = 0;
 struct email {
     // hash just to make sure no repeated emails
     int hash;
-    char sender[16];
-    char recipient[16];
-    char title[16];
-    char body[1024];
+    char sender[MAX_NAME_BYTES];
+    char recipient[MAX_NAME_BYTES];
+    char title[MAX_TITLE_BYTES];
+    char body[MAX_COMPOSE_BYTES];
     int upvotes;
     time_t creationDate;
 };
 
+bool server_should_close = false;
 int min_size_profanity = 999;
 int max_size_profanity = -1;
 // if num of profanity is > 127, crash
@@ -71,6 +72,10 @@ int num_kosher_chars(char* string, int type);
 struct email parse_user_file_data(char* username);
 void print_client(struct client_info* client, FILE* fd);
 
+void handle_interupt(int signal) {
+    server_should_close = true;
+}
+
 int main(int argc, char* argv[]) {
     printf("SIZE OF FD_SETSIZE (MAX NUM CONNECTIONS) = %d\n", FD_SETSIZE);
 
@@ -79,9 +84,12 @@ int main(int argc, char* argv[]) {
         return 0;
     }
 
-    // OS will send SIGPIPE, killing the program, if a TCP packet is sent (i.e. send()) to a disconeccted socket
+    // OS will send SIGPIPE, killing the program, if a TCP packet is sent (i.e. send()) to a disconnected socket
     // Ignoring SIGPIPE so program doesn't die
     signal(SIGPIPE, SIG_IGN);
+
+    // When SIGINT, close server
+    signal(SIGINT, handle_interupt);
 
     // init profanity list
     hash_profanity_list(profanity_hash_list, profanity_list, &max_size_profanity, &min_size_profanity);
@@ -116,9 +124,9 @@ int main(int argc, char* argv[]) {
     }
     int http = create_socket(0, "80");
 
+    // drop root privileges if root
     const int webserver_uid = 1001;
     const int webserver_gid = 1002;
-    // drop root privileges if root
     if (getuid() == 0) {
         printf("sudo, dropping root privileges\n");
         if (setgid(webserver_gid) != 0) {
@@ -135,14 +143,18 @@ int main(int argc, char* argv[]) {
         exit(1);
     }
 
+    #if PRINT_CLIENTS_AFTER_FUNC == true
     printf("Before main clients = %p\n", clients);
+    #endif
 
     // MAIN LOOP
-    while (true) {
+    while (!server_should_close) {
         
         fd_set reads;
         reads = wait_on_clients(server, &clients);
+        #if PRINT_CLIENTS_AFTER_FUNC == true
         printf("After wait_on_clients() clients = %p\n", clients);
+        #endif
 
         // use poll() instead
         /*fd_set http_reads;
@@ -170,7 +182,9 @@ int main(int argc, char* argv[]) {
         if (FD_ISSET(server, &reads)) {
 
             struct client_info* client = get_client(-1, &clients);
+            #if PRINT_CLIENTS_AFTER_FUNC == true
             printf("After get_client() clients = %p\n", clients);
+            #endif
 
             client->socket = accept(server,
                         (struct sockaddr*) &client->address,
@@ -223,14 +237,17 @@ int main(int argc, char* argv[]) {
         }
 
         struct client_info* client = clients;
+        #if PRINT_CLIENTS_AFTER_FUNC == true
         printf("Starting client = %p\n", client);
+        #endif 
         while (client != NULL) {
+            #if PRINT_CLIENTS_AFTER_FUNC == true
             printf("Client is not null\n");
+            #endif
             
             struct client_info* next = client->next;
 
             if (FD_ISSET(client->socket, &reads)) {
-                printf("Reading data from a client\n");
 
                 // Skips client if getsockopt() returns an error, dies if getsockopt() failed
                 // maybe should handle error
@@ -359,7 +376,7 @@ void serve_resource(struct client_info* client, const char* path) {
         return;
     }
 
-    //Huh?
+    // If public is somehow not found
     if (strstr(path, "public") != 0) {
         printf("sussy request\n");
         send_404(client, &clients);
@@ -405,12 +422,10 @@ void serve_resource(struct client_info* client, const char* path) {
     SSL_write(client->ssl, buffer, strlen(buffer));
     
     sprintf(buffer, "\r\n");
-    //send(client->socket, buffer, strlen(buffer), 0);
     SSL_write(client->ssl, buffer, strlen(buffer));
     
     int bytes_read = fread(buffer, 1, BSIZE, fp);
     while (bytes_read != 0) {
-        //send(client->socket, buffer, bytes_read, 0);
         SSL_write(client->ssl, buffer, bytes_read);
         bytes_read = fread(buffer, 1, BSIZE, fp);
     }
@@ -424,7 +439,7 @@ void serve_resource(struct client_info* client, const char* path) {
 
 void handle_post(struct client_info* client) {
     
-
+    
     printf("handle_post() \n");
     // Should add user file data into data strcture in main()
     //struct user_data users = parse_user_file_data();
@@ -1125,6 +1140,8 @@ typedef union {
     int i;
 } raw_int;
 
+// Counts number of legal charcters (funny ascii symbols, letters, digits)
+// Only allows newline in the text area
 // type 0 is username, recipient, title. type 1 is textarea
 int num_kosher_chars(char* string, int type) {
 
@@ -1164,14 +1181,10 @@ int num_kosher_chars(char* string, int type) {
                     }
                 }
                 if (contains_delimiter) {
-                    printf("string illegally contains delimter \"%s\"", DELIMITER);
+                    printf("String illegally contains delimter \"%s\"", DELIMITER);
                     return -1;
                 }
             }
-            //if (byte == '\r' && (i + 1) < strlen(string) && string[i + 1] == '\n') {
-            //    printf("illegal \\r\\n in string\n");
-            //    return -1;
-            //}
             char_count++;
             continue;
         }
@@ -1191,13 +1204,12 @@ int num_kosher_chars(char* string, int type) {
             }
             printf("\n");
         }
+
         raw_int INTEGER;
         INTEGER.c[0] = string[i];
         INTEGER.c[1] = string[i+1];
         INTEGER.c[2] = string[i+2];
         INTEGER.c[3] = string[i+3];
-
-
         bool is_in_emoji_array = false;
         for (int j = 0; j < total_emojis; j++) {
             raw_int emoji_int;
@@ -1273,8 +1285,6 @@ struct email parse_user_file_data(char* username) {
     drop_client(client, &clients);
     */
 }
-
-
 
 void print_client(struct client_info* client, FILE* fd) {
 
