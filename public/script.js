@@ -428,7 +428,20 @@ function updateEmails(emails) {
     }
 }
 
-// server stuff
+async function emailSentPopUp(recipientString) {
+    const mainContainer = document.querySelector('.mainContainer');
+    let popUp = document.createElement('div');
+    popUp.classList.add('popUp');
+    popUp.textContent = "Message sent to " + recipientString + "..."
+    
+    mainContainer.append(popUp);
+
+    setTimeout(function(){
+        popUp.remove();
+    }, 3500);
+}
+
+// SERVER STUFF !!!!
 async function makePost() {
     console.log("makePost");
     
@@ -510,6 +523,7 @@ async function makePost() {
             if (response.status === 201) {
                 console.log("email successfully sent");
                 console.log(response);
+                emailSentPopUp(recipientString);
                 currentUsername = usernameString;
                 getFunction(response.headers.get('Location')); 
 

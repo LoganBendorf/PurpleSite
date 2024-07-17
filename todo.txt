@@ -1,0 +1,15 @@
+Add button on mobile that switches between email and compose, cause the screen width is too small.
+    Like [Emails Compose] and they'll have different background colors, and when you switch
+    between them it will darken the one that is inactive. Make it slide or something too.
+
+Clear text after sending message. Maybe make up popup saying messge sent (or not sent).
+
+Checkbox link for upvotes: https://moderncss.dev/pure-css-custom-checkbox-style/
+
+FUNCTIONALITY ERROR: Apparently \r\n is just what chrome does when you press enter, so I'm going
+    to have to change the email.txt encoding. "''\n"??
+
+Client side input validation.
+    https://www.theodinproject.com/lessons/node-path-intermediate-html-and-css-form-validation
+
+Make emoji buttons nice

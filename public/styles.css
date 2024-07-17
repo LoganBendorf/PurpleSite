@@ -72,11 +72,25 @@ body {
 }
 .mainContainer {
     display: flex;
-    flex-direction: row;
+    flex-direction: row;    
     justify-content: space-evenly;
     width: 99%;
     height: 92%;
+    position: relative;
 }
+.popUp {
+    border: solid white;
+    position: absolute;
+    border-radius: 20px;
+    position: absolute; 
+    left: 0; 
+    right: 0; 
+    margin-left: auto; 
+    margin-right: auto; 
+    width: 400px; /* Need a specific value to work */
+    text-align: center;
+}
+
 .contentContainer {
     display: flex;
     flex-direction: column;
