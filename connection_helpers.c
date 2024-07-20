@@ -12,6 +12,7 @@
 #include <signal.h>
 
 
+// Should exit on failure
 int create_socket(const char* host, const char* port) {
 
     printf("Configuring local address...\n");
@@ -28,28 +29,28 @@ int create_socket(const char* host, const char* port) {
     int socket_listen;
     socket_listen = socket(bind_address->ai_family, bind_address->ai_socktype, bind_address->ai_protocol);
     if (socket_listen < 0) {
-        fprintf(stderr, "socket() failed. (%d, %s).\n", errno, strerror(errno));
+        fprintf(stderr, "create_socket(). socket() failed. (%d, %s).\n", errno, strerror(errno));
         exit(1);
     }
 
     // Lets you reuse a port if it was recently in use (claims it from OS)
     int yes = 1;
     if (setsockopt(socket_listen, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes)) == -1) {
-        perror("setsockopt error\n");
+        perror("create_socket(). setsockopt error\n");
         exit(1);
     }
     
     printf("Binding socket to local address...\n");
     if (bind(socket_listen,
             bind_address->ai_addr, bind_address->ai_addrlen)) {
-        fprintf(stderr, "bind() failed. (%d, %s).\n", errno, strerror(errno));
+        fprintf(stderr, "create_socket(). bind() failed. (%d, %s).\n", errno, strerror(errno));
         exit(1);
     }  
     freeaddrinfo(bind_address);
 
     printf("Listening...\n");
     if (listen(socket_listen, 10) < 0) {
-        fprintf(stderr, "listen() failed. (%d, %s).\n", errno, strerror(errno));
+        fprintf(stderr, "create_socket(). listen() failed. (%d, %s).\n", errno, strerror(errno));
         exit(1);
     }
 
@@ -74,8 +75,8 @@ struct client_info* get_client(int socket, struct client_info** clientsPtr) {
     struct client_info* new = (struct client_info*) calloc(1, sizeof(struct client_info));
 
     if (!new) {
-        fprintf(stderr, "Out of memory.\n");
-        exit(1);
+        fprintf(stderr, "get_client(). Out of memory?, returning NULL\n");
+        return NULL;
     }
 
     new->address_length = sizeof(new->address);
@@ -92,10 +93,6 @@ void drop_client(struct client_info* client, struct client_info** clientsPtr) {
     printf("Dropping client\n");
     #endif
 
-    SSL_shutdown(client->ssl);
-    close(client->socket);
-    SSL_free(client->ssl);
-
     if (clientsPtr == NULL) {
         return;
     }
@@ -105,6 +102,9 @@ void drop_client(struct client_info* client, struct client_info** clientsPtr) {
         if (*pointer == client) {
             *pointer = client->next;
             // client = client->next?? equivalent?
+            SSL_shutdown(client->ssl);
+            close(client->socket);
+            SSL_free(client->ssl);
             free(client);
             return;
         }
@@ -112,7 +112,6 @@ void drop_client(struct client_info* client, struct client_info** clientsPtr) {
     }
 
     fprintf(stderr, "drop_client(). Client not found.\n");
-    exit(1);
 }
 
 const char* get_client_address(struct client_info** clientPtr) {
@@ -157,8 +156,8 @@ fd_set wait_on_clients(int server, struct client_info** clientsPtr) {
     timeout.tv_sec = 20;
     timeout.tv_nsec = 0;
     if (pselect(max_socket  + 1, &reads, 0, 0, &timeout, &sigmask) < 0) {
-        fprintf(stderr, "select() failed. (%d, %s)\n", errno, strerror(errno));
-        exit(1);
+        fprintf(stderr, "get_client_address(). select() failed. (%d, %s)\n", errno, strerror(errno));
+        //exit(1);
     }
 
     return reads;

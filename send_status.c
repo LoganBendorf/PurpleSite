@@ -3,6 +3,8 @@
 #include "connection_helpers.h"
 
 void send_301(struct client_info* client, struct client_info** clientsPtr) {
+    if (client == NULL) {
+        return;}
     const char* c301 = "HTTP/1.1 301 Moved Permanently\r\n"
             "Location: https://www.purplesite.skin\r\n\r\n";
     printf("Sent default 301:\n%s\n", c301);
@@ -15,6 +17,8 @@ void send_301(struct client_info* client, struct client_info** clientsPtr) {
 #define printf(...)
 #endif
 void send_400(struct client_info* client, struct client_info** clientsPtr, char* string) {
+    if (client == NULL) {
+        return;}
     if (string == NULL || strlen(string) == 0) {
         const char* c400 = "HTTP/1.1 400 Bad Request\r\n"
             "Connection: close\r\n"
@@ -53,10 +57,11 @@ void send_400(struct client_info* client, struct client_info** clientsPtr, char*
 #endif
 
 void send_404(struct client_info* client, struct client_info** clientsPtr) {
+    if (client == NULL) {
+        return;}
     const char* c404 = "HTTP/1.1 404 Not Found\r\n"
         "Connection: close\r\n"
         "content-Length: 9\r\n\r\nNot Found";
-    //send(client->socket, c404, strlen(c404), 0);
     SSL_write(client->ssl, c404, strlen(c404));
     drop_client(client, clientsPtr);
 }

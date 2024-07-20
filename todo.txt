@@ -2,7 +2,7 @@ Add button on mobile that switches between email and compose, cause the screen w
     Like [Emails Compose] and they'll have different background colors, and when you switch
     between them it will darken the one that is inactive. Make it slide or something too.
 
-Clear text after sending message. Maybe make up popup saying messge sent (or not sent).
+Clear text after sending message. Maybe make up pop up saying messge sent (or not sent).
 
 Checkbox link for upvotes: https://moderncss.dev/pure-css-custom-checkbox-style/
 
@@ -10,3 +10,7 @@ Client side input validation.
     https://www.theodinproject.com/lessons/node-path-intermediate-html-and-css-form-validation
 
 Make emoji buttons nice
+
+Cache things
+
+Use some kinda of arena memory allocation instead of just mallocing into the void, so it's easier to debug, you can just read the memory like an array

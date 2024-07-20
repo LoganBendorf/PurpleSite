@@ -70,6 +70,7 @@ void serve_resource(struct client_info* client, const char* path);
 void handle_post(struct client_info* client);
 int num_kosher_chars(char* string, int type);
 struct email parse_user_file_data(char* username);
+void print_clients(struct client_info* clients, FILE* fd);
 void print_client(struct client_info* client, FILE* fd);
 
 void handle_interupt(int signal) {
@@ -87,6 +88,7 @@ int main(int argc, char* argv[]) {
     // OS will send SIGPIPE, killing the program, if a TCP packet is sent (i.e. send()) to a disconnected socket
     // Ignoring SIGPIPE so program doesn't die
     signal(SIGPIPE, SIG_IGN);
+    sigaction(SIGPIPE, &(struct sigaction){SIG_IGN}, NULL);
 
     // When SIGINT, close server
     signal(SIGINT, handle_interupt);
@@ -192,7 +194,11 @@ int main(int argc, char* argv[]) {
 
             if (client->socket < 0) {
                 fprintf(stderr, "accept() failed. (%d, %s)\n", errno, strerror(errno));
+                printf("CLIENT:\n");
                 print_client(client, stderr);
+                printf("\nCLIENTS");
+                print_clients(clients, stderr);
+                printf("\n");
                 return 1;
             }
 
@@ -212,7 +218,11 @@ int main(int argc, char* argv[]) {
             client->ssl = SSL_new(ctx);
             if (!ctx) {
                 fprintf(stderr, "SSL_new() failed.\n");
+                printf("CLIENT:\n");
                 print_client(client, stderr);
+                printf("\nCLIENTS");
+                print_clients(clients, stderr);
+                printf("\n");
                 return 1;
             }
 
@@ -255,8 +265,13 @@ int main(int argc, char* argv[]) {
                 socklen_t size = client->address_length;
                 if (getsockopt(client->socket, SOL_SOCKET, SO_ERROR, &errorVal, &size) < 0) {
                     fprintf(stderr, "getsockopt() failed. (%d, %s)\n", errno, strerror(errno));
+                    printf("CLIENT:\n");
                     print_client(client, stderr);
-                    return 1;
+                    //printf("\nCLIENTS");
+                    //print_clients(clients, stderr);
+                    //printf("\n");
+                    drop_client(client, &clients);
+                    continue;
                 }
                 if (errorVal < 0) {
                     printf("getsockopt(), skipped client. (%d, %s)\n", errorVal, strerror(errorVal));
@@ -284,8 +299,8 @@ int main(int argc, char* argv[]) {
                 client->received += bytes_read;
                 client->request[client->received] = 0;
 
-                char* q = strstr(client->request, "\r\n\r\n");
-                if (q) {
+                char* http_msg_end = strstr(client->request, "\r\n\r\n");
+                if (http_msg_end) {
                     // strncmp returns 0 if strings are equal
                     if (strncmp("GET /", client->request, 5) == 0) {
                         char* path = client->request + 4;
@@ -310,7 +325,7 @@ int main(int argc, char* argv[]) {
     }
 
     printf("\nClosing server...\n");
-    // while might be buggy, untested
+    // semms to work fine
     while (clients) drop_client(clients, &clients);
     SSL_CTX_free(ctx);
     close(server);
@@ -352,6 +367,11 @@ const char* get_content_type(const char* path) {
 
 void serve_resource(struct client_info* client, const char* path) {
 
+    if (client == NULL) {
+        fprintf(stderr, "serve_resource(). Called with NULL client\n");
+        return;
+    }
+
     printf("serve_resource() %s %s\n", get_client_address(&client), path);
 
     if (strcmp(path, "/") == 0) path = "/index.html";
@@ -386,7 +406,6 @@ void serve_resource(struct client_info* client, const char* path) {
     char full_path[128];
     sprintf(full_path, "public%s", path);
     
-    
     FILE* fp = fopen(full_path, "rba");
 
     if (fp == NULL) {
@@ -403,24 +422,20 @@ void serve_resource(struct client_info* client, const char* path) {
     
 
     #define BSIZE 1024
-    char buffer[BSIZE];
+    char buffer[BSIZE] = {0};
 
     sprintf(buffer, "HTTP/1.1 200 OK\r\n");
-    //send(client->socket, buffer, strlen(buffer), 0);
     SSL_write(client->ssl, buffer, strlen(buffer));
-    
+
     sprintf(buffer, "Connection: close\r\n");
-    //send(client->socket, buffer, strlen(buffer), 0);
     SSL_write(client->ssl, buffer, strlen(buffer));
-    
+
     sprintf(buffer, "Content-Length: %lu\r\n", cl);
-    //send(client->socket, buffer, strlen(buffer), 0);
     SSL_write(client->ssl, buffer, strlen(buffer));
-    
+
     sprintf(buffer, "Content-Type: %s\r\n", ct);
-    //send(client->socket, buffer, strlen(buffer), 0);
     SSL_write(client->ssl, buffer, strlen(buffer));
-    
+
     sprintf(buffer, "\r\n");
     SSL_write(client->ssl, buffer, strlen(buffer));
     
@@ -749,15 +764,6 @@ void handle_post(struct client_info* client) {
                 recip_equals_sender = false;
                 break;
             }
-            /* Cool bit printer
-            printf("Printing bits of non-ascii char\n");
-            int k = 7;
-            for (int j = 128; j > 0; j/=2) {
-                printf("%u", (j & byte) >> k);
-                k--;
-            }
-            printf("\n");
-            */
         }
     }
     if (recip_equals_sender) {
@@ -942,106 +948,6 @@ void handle_post(struct client_info* client) {
     strcat(hash_string, body_hash);
     strcat(hash_string, "\n");
 
-    // too hard
-    /*#define READ_BUFFER_SIZE 1024 * 4
-    char read_buffer[READ_BUFFER_SIZE];
-    int bytes_read = 0;
-    char recovery_bytes[64] = {0};
-    bool recover = false;
-    char recovered_msg[64] = {0};
-    // CURENNTLY WORKING ON RECOVERY MODE
-    do {
-
-        bytes_read = fread(read_buffer, READ_BUFFER_SIZE, 1, file);
-        int start_value = 0;
-        if (recover) {
-            char* base = recovery_bytes;
-            char* pointer = recovery_bytes;
-            char* quinter = hash_string;
-            bool found = true;
-            while (pointer < recovery_bytes + 64 && pointer != 0) {
-                if (*pointer != *quinter) {
-                    pointer = strstr(pointer, "\r");
-                    if (pointer == 0) {
-                        found = false;
-                        break;
-                    }
-                    base = pointer;
-                    quinter = hash_string;
-                    continue;
-                }
-                pointer++;
-                quinter++;
-            }
-            if (found) {
-                char hash_line[64] = {};
-                if (*pointer != '\r') {
-                    printf("OOPS\n");
-                }
-                for (int i = 0; i < strlen(base); i++) {
-                    hash_line[i] = base[i];
-                }
-                if (quinter == 0) {
-                    int x = 0;
-                    int y = strlen(base);
-                    while (read_buffer[x] != '\r') {
-                        hash_line[y] = read_buffer[x];
-                        x++;
-                        y++;
-                        if (x == strlen(read_buffer)) {
-                            goto END;
-                        }
-                    }
-                }
-                // home run
-                if (strcmp(hash_line, hash_string) == 0) {
-                    locateContentFail(__LINE__, "Message sent already");
-                }
-                start_value = strlen(hash_string);
-            }
-        }
-        printf("bytes_read = %d\n", bytes_read);
-        for (int i = start_value; i < bytes_read; i++) {
-            if (read_buffer[i] != '\r') {
-                continue;
-            }
-            if (bytes_read - i < strlen(hash_string)) {
-                printf("recovery mode\n");
-                for (int j = i; j < bytes_read; j++) {
-                    recovery_bytes[j] = read_buffer[i];
-                    i++;
-                }
-                recover = true;
-                break;
-            }
-            if (strcmp(read_buffer + i, hash_string) != 0) {
-                continue;
-            }
-
-            pretty sure this isn't useful
-            char* pointer = strstr(read_buffer + i, hash_string);
-            printf("found matching string");
-            pointer += 8;
-            char* end = strstr(pointer, "\r\n");
-            if (end == 0) {
-                printf("end equaled 0 during hash parsing, really bad\n");
-                continue;
-            }
-            char hash_read[64] = {0};
-            sprintf(hash_read, "%.*s", (int) (end - pointer), pointer);
-            printf("body hash = %s: compared hash = %s\n", body_hash, hash_read);
-            if (strcmp(hash_read, body_hash) != 0) {
-                continue;
-            }
-            end of not useful
-            
-            locateContentFail(__LINE__, "Message sent already");
-        }
-        END:
-    } while (bytes_read == READ_BUFFER_SIZE);
-    printf("\n");
-    #undef READ_BUFFER_SIZE
-    */
     // END OF TEXT AREA
 
     #undef locateContentFail
@@ -1115,18 +1021,13 @@ void handle_post(struct client_info* client) {
     fclose(file);
 
 
-    char buffer[BSIZE];
+    char buffer[BSIZE] = {0};
     //sprintf(buffer, "HTTP/1.1 200 OK\r\n");
+    // Compressed multiple writes into one
     sprintf(buffer, "HTTP/1.1 201 Created\r\n");
-    SSL_write(client->ssl, buffer, strlen(buffer));
-
-    sprintf(buffer, "Access-Control-Expose-Headers: Location\r\n");
-    SSL_write(client->ssl, buffer, strlen(buffer));
-
-    sprintf(buffer, "Location: /emails.txt\r\n");
-    SSL_write(client->ssl, buffer, strlen(buffer));
-    
-    sprintf(buffer, "\r\n");
+    strcat(buffer, "Access-Control-Expose-Headers: Location\r\n");
+    strcat(buffer, "Location: /emails.txt\r\n");    
+    strcat(buffer, "\r\n");
     SSL_write(client->ssl, buffer, strlen(buffer));
 
     drop_client(client, &clients);
@@ -1234,63 +1135,28 @@ int num_kosher_chars(char* string, int type) {
 }
 
 
-struct email parse_user_file_data(char* username) {
-    /*
-    FILE* fp = fopen("userData.txt", "r");
+struct email parse_user_file_data(char* username) { 
+    // Wanted to use double buffer to read from file at startup, add emails to data structure,
+    // add new emails to data structure, then write emails baack to file
+}
 
-    if (fp == NULL) {
-        printf("File failed to open, full_path = %s. Errno = %d, errstr = %s\n", full_path, errno, strerror(errno));
-        send_404(client, &clients);
-        return;
+void print_clients(struct client_info* clients, FILE* fd) {
+    struct client_info* client = clients;
+    while (client != NULL) {
+        print_client(client, fd);
+        if (client == client->next) {
+            fprintf(stderr, "prinf_clients. Client equaled client->next\n");
+            return;
+        }
+        client = client->next;
     }
-    
-    fseek(fp, 0L, SEEK_END);
-    size_t cl = ftell(fp);
-    rewind(fp);
-
-    const char* ct = get_content_type(full_path);
-    
-
-    #define BSIZE 1024
-    char buffer[BSIZE];
-
-    sprintf(buffer, "HTTP/1.1 200 OK\r\n");
-    //send(client->socket, buffer, strlen(buffer), 0);
-    SSL_write(client->ssl, buffer, strlen(buffer));
-    
-    sprintf(buffer, "Connection: close\r\n");
-    //send(client->socket, buffer, strlen(buffer), 0);
-    SSL_write(client->ssl, buffer, strlen(buffer));
-    
-    sprintf(buffer, "Content-Length: %lu\r\n", cl);
-    //send(client->socket, buffer, strlen(buffer), 0);
-    SSL_write(client->ssl, buffer, strlen(buffer));
-    
-    sprintf(buffer, "Content-Type: %s\r\n", ct);
-    //send(client->socket, buffer, strlen(buffer), 0);
-    SSL_write(client->ssl, buffer, strlen(buffer));
-    
-    sprintf(buffer, "\r\n");
-    //send(client->socket, buffer, strlen(buffer), 0);
-    SSL_write(client->ssl, buffer, strlen(buffer));
-    
-    int bytes_read = fread(buffer, 1, BSIZE, fp);
-    while (bytes_read != 0) {
-        //send(client->socket, buffer, bytes_read, 0);
-        SSL_write(client->ssl, buffer, bytes_read);
-        bytes_read = fread(buffer, 1, BSIZE, fp);
-    }
-
-    fclose(fp);
-    drop_client(client, &clients);
-    */
 }
 
 void print_client(struct client_info* client, FILE* fd) {
 
     fprintf(fd, "address_length = %d\n", client->address_length);
     //printf("raw address = %ld\n", client->address);
-    fprintf(fd, "address = %s", get_client_address(&client));
+    fprintf(fd, "address = %s\n", get_client_address(&client));
     fprintf(fd, "socket = %d\n", client->socket);
     fprintf(fd, "parseFailures = %d\n", client->parseFailures);
 }
