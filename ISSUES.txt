@@ -1,3 +1,6 @@
 
 
-# Hashing profanity only works for last item
+# Profanity hash is non-funcitonal, likely passed by value
+
+# If someone connects and doesn't send anything I think they stay connceted forever blocking everything
+    Could add time connected to client DS and kick them out after a while

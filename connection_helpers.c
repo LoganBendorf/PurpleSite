@@ -140,10 +140,25 @@ fd_set wait_on_clients(int server, struct client_info** clientsPtr) {
 
     struct client_info* client = clients;
 
+    int MAX_CLIENTS = 1000;
+
     while (client) {
         FD_SET(client->socket, &reads);
         if (client->socket > max_socket)
             max_socket = client->socket;
+
+        // Error handling
+        if (client == client->next) {
+            fprintf(stderr, "wait_on_clients(). Client equaled itself\n");
+            drop_client(client, clientsPtr);
+            break;
+        }
+        if (MAX_CLIENTS-- <= 0) {
+            fprintf(stderr, "wait_on_clients(). Too many clients or loop\n");
+            drop_client(client, clientsPtr);
+            break;
+        }
+
         client = client->next;
     }
 

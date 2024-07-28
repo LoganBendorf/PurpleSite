@@ -1,3 +1,6 @@
+Now that functions have been moved out into their own files.
+    Create tests for them
+
 Add button on mobile that switches between email and compose, cause the screen width is too small.
     Like [Emails Compose] and they'll have different background colors, and when you switch
     between them it will darken the one that is inactive. Make it slide or something too.
@@ -14,3 +17,5 @@ Make emoji buttons nice
 Cache things
 
 Use some kinda of arena memory allocation instead of just mallocing into the void, so it's easier to debug, you can just read the memory like an array
+
+?Robots.txt?

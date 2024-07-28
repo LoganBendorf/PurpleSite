@@ -94,7 +94,7 @@ int main(int argc, char* argv[]) {
     signal(SIGINT, handle_interupt);
 
     // init profanity list
-    hash_profanity_list(profanity_hash_list, profanity_list, &max_size_profanity, &min_size_profanity);
+    hash_profanity_list(&profanity_hash_list, &profanity_list, &max_size_profanity, &min_size_profanity);
 
     // INIT OPENSSL
     SSL_library_init();
@@ -250,6 +250,7 @@ int main(int argc, char* argv[]) {
         #if PRINT_CLIENTS_AFTER_FUNC == true
         printf("Starting client = %p\n", client);
         #endif 
+        int MAX_CLIENTS = 1000;
         while (client != NULL) {
             #if PRINT_CLIENTS_AFTER_FUNC == true
             printf("Client is not null\n");
@@ -259,28 +260,24 @@ int main(int argc, char* argv[]) {
 
             if (FD_ISSET(client->socket, &reads)) {
 
-                // Skips client if getsockopt() returns an error, dies if getsockopt() failed
-                // maybe should handle error
+                // Skips client if getsockopt() returns an error, no special handling
                 int errorVal = 0;
                 socklen_t size = client->address_length;
                 if (getsockopt(client->socket, SOL_SOCKET, SO_ERROR, &errorVal, &size) < 0) {
                     fprintf(stderr, "getsockopt() failed. (%d, %s)\n", errno, strerror(errno));
                     printf("CLIENT:\n");
                     print_client(client, stderr);
-                    //printf("\nCLIENTS");
-                    //print_clients(clients, stderr);
-                    //printf("\n");
+                    printf("\nCLIENTS");
+                    print_clients(clients, stderr);
+                    printf("\n");
                     drop_client(client, &clients);
-                    continue;
-                }
-                if (errorVal < 0) {
-                    printf("getsockopt(), skipped client. (%d, %s)\n", errorVal, strerror(errorVal));
                     client = next;
                     continue;
                 }
 
                 if (MAX_REQUEST_SIZE == client->received) {
                     send_400(client, &clients, NULL);
+                    client = next;
                     continue;
                 }
 
@@ -291,9 +288,10 @@ int main(int argc, char* argv[]) {
                 printf("\nReceived:\n%s\n", client->request);
                 #endif
 
-                if (bytes_read < 1) {
+                if (bytes_read <= 0) {
                     printf("Unexpected disconnect from %s.\n", get_client_address(&client));
                     drop_client(client, &clients);
+                    client = next;
                     continue;
                 }
                 client->received += bytes_read;
@@ -319,7 +317,16 @@ int main(int argc, char* argv[]) {
                     }
                 }
             }
-
+            if (client == client->next) {
+                fprintf(stderr, "Reading clients (line %d). Client equaled itself\n", __LINE__);
+                drop_client(client, &clients);
+                break;
+            }
+            if (MAX_CLIENTS-- <= 0) {
+                fprintf(stderr, "Reading clients (line %d). Too many clients or loop\n", __LINE__);
+                drop_client(client, &clients);
+                break;
+            }
             client = next;
         }
     }
@@ -415,10 +422,10 @@ void serve_resource(struct client_info* client, const char* path) {
     }
     
     fseek(fp, 0L, SEEK_END);
-    size_t cl = ftell(fp);
+    size_t content_length = ftell(fp);
     rewind(fp);
 
-    const char* ct = get_content_type(full_path);
+    const char* content_type = get_content_type(full_path);
     
 
     #define BSIZE 1024
@@ -430,10 +437,10 @@ void serve_resource(struct client_info* client, const char* path) {
     sprintf(buffer, "Connection: close\r\n");
     SSL_write(client->ssl, buffer, strlen(buffer));
 
-    sprintf(buffer, "Content-Length: %lu\r\n", cl);
+    sprintf(buffer, "Content-Length: %lu\r\n", content_length);
     SSL_write(client->ssl, buffer, strlen(buffer));
 
-    sprintf(buffer, "Content-Type: %s\r\n", ct);
+    sprintf(buffer, "Content-Type: %s\r\n", content_type);
     SSL_write(client->ssl, buffer, strlen(buffer));
 
     sprintf(buffer, "\r\n");
@@ -456,8 +463,6 @@ void handle_post(struct client_info* client) {
     
     
     printf("handle_post() \n");
-    // Should add user file data into data strcture in main()
-    //struct user_data users = parse_user_file_data();
 
     if (strncmp(client->request, "POST / HTTP/1.1\r\n", 17) != 0) {
         printf("First post line malformed\n");
@@ -964,6 +969,7 @@ void handle_post(struct client_info* client) {
     printf("Text area hash = %d\n", text_area_hash);
     printf("End of content\n");
     
+    // creating email struct but currently nothing is being done with it
     struct email new_email = {0};
     new_email.hash = text_area_hash;
     strcpy(new_email.sender, username);
@@ -1145,7 +1151,7 @@ void print_clients(struct client_info* clients, FILE* fd) {
     while (client != NULL) {
         print_client(client, fd);
         if (client == client->next) {
-            fprintf(stderr, "prinf_clients. Client equaled client->next\n");
+            fprintf(stderr, "prinf_clients(). Client equaled client->next\n");
             return;
         }
         client = client->next;

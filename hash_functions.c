@@ -65,7 +65,11 @@ int hash_function(char* string) {
 #if PROFANITY_PRINT == false
 #define printf
 #endif
-void hash_profanity_list(int profanity_hash_list[], char* profanity_list[], int* max_size_profanity, int* min_size_profanity) {
+// should probably just generate a list and hand it over, would be easier
+// function should also be the one doing the file reading
+void hash_profanity_list(int (*profanity_hash_listPtr)[], char* (*profanity_listPtr)[], int* max_size_profanity, int* min_size_profanity) {
+    int* profanity_hash_list = *profanity_hash_listPtr;
+    char** profanity_list = *profanity_listPtr;
     printf("\nPRINTING PROFANITY\n");
     FILE* file = fopen("profanity.txt", "r");
     char line[64];
