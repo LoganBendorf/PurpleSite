@@ -45,6 +45,7 @@ const char* DELIMITER = "\'\'\n";
 #include "send_status.h"
 #include "hash_functions.h"
 
+// Clients are calloced
 static struct client_info* clients = 0;
 
 struct email {
@@ -62,6 +63,7 @@ bool server_should_close = false;
 int min_size_profanity = 999;
 int max_size_profanity = -1;
 // if num of profanity is > 127, crash
+// String pointers are calloced
 char* profanity_list[128] = {0};
 int profanity_hash_list[128] = {0};
 
@@ -94,7 +96,7 @@ int main(int argc, char* argv[]) {
     signal(SIGINT, handle_interupt);
 
     // init profanity list
-    hash_profanity_list(&profanity_hash_list, &profanity_list, &max_size_profanity, &min_size_profanity);
+    hash_profanity_list(profanity_hash_list, profanity_list, &max_size_profanity, &min_size_profanity);
 
     // INIT OPENSSL
     SSL_library_init();
@@ -683,7 +685,7 @@ void handle_post(struct client_info* client) {
         locateContentFail(__LINE__, "Username contained too many characterss");
     }
 
-    if (contains_profanity(username, profanity_hash_list, profanity_list, &max_size_profanity, &min_size_profanity)) {
+    if (contains_profanity(username, profanity_hash_list, profanity_list, max_size_profanity, min_size_profanity)) {
         locateContentFail(__LINE__, "Username has swears );");
     }
 
@@ -783,7 +785,7 @@ void handle_post(struct client_info* client) {
         locateContentFail(__LINE__, "Recipient contained too many characterss");
     }
 
-    if (contains_profanity(recipient, profanity_hash_list, profanity_list, &max_size_profanity, &min_size_profanity)) {
+    if (contains_profanity(recipient, profanity_hash_list, profanity_list, max_size_profanity, min_size_profanity)) {
         locateContentFail(__LINE__, "Recipient has swears );");
     }
 
@@ -856,7 +858,7 @@ void handle_post(struct client_info* client) {
         locateContentFail(__LINE__, "Title contained too many characterss");
     }
 
-    if (contains_profanity(title, profanity_hash_list, profanity_list, &max_size_profanity, &min_size_profanity)) {
+    if (contains_profanity(title, profanity_hash_list, profanity_list, max_size_profanity, min_size_profanity)) {
         locateContentFail(__LINE__, "Title has swears );");
     }
 
@@ -926,7 +928,7 @@ void handle_post(struct client_info* client) {
         locateContentFail(__LINE__, "Text area contained too many characters");
     }
 
-    if (contains_profanity(textAreaBuffer, profanity_hash_list, profanity_list, &max_size_profanity, &min_size_profanity)) {
+    if (contains_profanity(textAreaBuffer, profanity_hash_list, profanity_list, max_size_profanity, min_size_profanity)) {
         locateContentFail(__LINE__, "Text area has swears );");
     }
 
