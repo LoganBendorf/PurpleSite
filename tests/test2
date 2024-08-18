@@ -2,9 +2,9 @@ ssl = true
 
 http = https
 
-data_blob = test1
+data_blob = In Test 2
 
-header = get
+header = post
 
 content_length = 437
 
@@ -15,7 +15,7 @@ boundary = auto
 username = Hello
 recipient = World
 title = I'm
-compose_text = Over there
+compose_text = Not here
 
 format {
     header

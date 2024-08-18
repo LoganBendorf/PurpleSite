@@ -1,0 +1,39 @@
+ssl = true
+
+http = https
+
+data_blob = In Test 2
+
+header = post
+
+content_length = 437
+
+content_type = auto
+
+boundary = --im straight up
+
+username = 
+recipient = were
+title = I'm
+compose_text = Hello
+
+format {
+    header
+    delay 12345
+    content_length
+    content_type \r\n
+    boundary \r\n
+    username \r\n
+    boundary \r\n
+    recipient
+    boundary \r\n
+    title
+    boundary \r\n
+    compose_text
+    boundary \r\n
+    end
+}
+
+
+
+
