@@ -1,0 +1,42 @@
+sl = true
+
+http = https
+
+data_blob = 
+
+header = get
+
+content_length = 437
+
+content_type = auto
+
+boundary = auto
+
+username = Hello
+
+recipient = World
+
+title = Bouta
+
+compose_text = Blow
+
+format {
+    header
+    delay 12345
+    content_length
+    content_type
+    boundary
+    username
+    boundary
+    recipient
+    boundary
+    title
+    boundary
+    compose_text
+    boundary
+    end
+}
+
+
+
+

@@ -1,0 +1,46 @@
+// connect with ssl or basic networking stuff
+ssl = true
+
+//http or https ???
+http = https
+
+data_blob = 
+
+// get or post
+header = get
+
+content_length = 437
+
+content_type = auto
+
+// can be auto
+boundary = 
+
+username = 
+
+recipient =
+
+title =
+
+compose_text =
+
+format {
+    header
+    delay 12345
+    content_length
+    content_type
+    boundary
+    username
+    boundary
+    recipient
+    boundary
+    title
+    boundary
+    compose_text
+    boundary
+    end
+}
+
+
+
+
