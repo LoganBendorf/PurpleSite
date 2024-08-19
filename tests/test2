@@ -4,7 +4,7 @@ http = https
 
 data_blob = In Test 2
 
-header = post
+header = get
 
 content_length = 437
 
@@ -24,6 +24,7 @@ format {
     content_type
     boundary
     username
+    data_blob data_blobblob
     boundary
     recipient
     boundary

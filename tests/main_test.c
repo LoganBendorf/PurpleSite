@@ -10,7 +10,106 @@
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 
+#include <sys/time.h>
+
+
+#define SERVER "127.0.0.1"
+#define PORT 443
+
+int server_fd;
+SSL_CTX *ctx;
 SSL *ssl;
+
+void ssl_connect() {
+    // Create a new SSL context
+    const SSL_METHOD *method = SSLv23_client_method();
+    ctx = SSL_CTX_new(method);
+    if (!ctx) {
+        ERR_print_errors_fp(stderr);
+        exit(1);
+    }
+     // Create a new SSL connection state
+    ssl = SSL_new(ctx);
+    if (!ssl) {
+        ERR_print_errors_fp(stderr);
+        SSL_CTX_free(ctx);
+        exit(EXIT_FAILURE);
+    }
+    // Create a socket and connect to the server
+    server_fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (server_fd < 0) {
+        perror("Unable to create socket");
+        SSL_free(ssl);
+        SSL_CTX_free(ctx);
+        exit(1);
+    }
+    struct sockaddr_in addr;
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(PORT);
+    if (inet_pton(AF_INET, SERVER, &addr.sin_addr) <= 0) {
+        perror("Invalid address/ Address not supported");
+        close(server_fd);
+        SSL_free(ssl);
+        SSL_CTX_free(ctx);
+        exit(1);
+    }
+    if (connect(server_fd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
+        perror("Connection failed");
+        close(server_fd);
+        SSL_free(ssl);
+        SSL_CTX_free(ctx);
+        exit(1);
+    }
+
+    struct timeval tv;
+    tv.tv_sec = 5; // 5 seconds
+    tv.tv_usec = 0;
+    setsockopt(server_fd, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof tv);
+        
+    // bind socket to ssl
+    SSL_set_fd(ssl, server_fd);
+
+    // ssl handshake
+    if (SSL_connect(ssl) <= 0) {
+        ERR_print_errors_fp(stderr);
+        exit(1);
+    } else {
+        printf("Connected to server with %s encryption\n", SSL_get_cipher(ssl));
+    }
+}
+
+void normal_connect() {
+    // Create a socket and connect to the server
+    server_fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (server_fd < 0) {
+        perror("Unable to create socket");
+        exit(1);
+    }
+    struct sockaddr_in addr;
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(PORT);
+    if (inet_pton(AF_INET, SERVER, &addr.sin_addr) <= 0) {
+        perror("Invalid address/ Address not supported");
+        close(server_fd);
+        exit(1);
+    }
+    if (connect(server_fd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
+        perror("Connection failed");
+        close(server_fd);
+        exit(1);
+    }
+
+    struct timeval tv;
+    tv.tv_sec = 5; // 5 seconds
+    tv.tv_usec = 0;
+    setsockopt(server_fd, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof tv);
+}
+
+void ssl_disconnect() {
+    close(server_fd);
+    SSL_shutdown(ssl);
+    SSL_free(ssl);
+}
 
 char* skip_whitespace(char* pointer) {
     while (*pointer == ' ' || *pointer == '\n' || *pointer == '\t') {
@@ -407,49 +506,49 @@ void run_test(char* filepath) {
         printf("Failed to find format data. [%s]\n", filepath); exit(1);
     }
 
-    printf("\nPRINTING WRITE BUFFER\n");
-
+    int line = 1;
+    char* start = pointer;
     char write_buffer[10240] = {0};
 
     while (pointer < end_of_format) {
 
         if (strncmp(pointer, "\\r\\n", 4) == 0) {
             strcat(write_buffer, "\r\n");
-            pointer += 5;
+            pointer += 4;
             printf("added \\r\\n\n");
         } else if (strncmp(pointer, "header", 6) == 0) {
             strcat(write_buffer, header_val);
-            pointer += 7;
+            pointer += 6;
         } else if (strncmp(pointer, "content_length", 14) == 0) {
             strcat(write_buffer, content_length_val);
-            pointer += 15;
+            pointer += 14;
         } else if (strncmp(pointer, "content_type", 12) == 0) {
             strcat(write_buffer, content_type_val); 
             strcat(write_buffer, boundary_val + 2);
-            pointer += 13;
+            pointer += 12;
         } else if (strncmp(pointer, "boundary", 8) == 0) {
             strcat(write_buffer, boundary_val); 
-            pointer += 9;
+            pointer += 8;
         } else if (strncmp(pointer, "username", 8) == 0) {
             strcat(write_buffer, username_val); 
-            pointer += 9;
+            pointer += 8;
         } else if (strncmp(pointer, "recipient", 9) == 0) {
             strcat(write_buffer, recipient_val); 
-            pointer += 10;
+            pointer += 9;
         } else if (strncmp(pointer, "title", 5) == 0) {
             strcat(write_buffer, title_val);
-            pointer += 6;
+            pointer += 5;
         } else if (strncmp(pointer, "compose_text", 12) == 0) {
             strcat(write_buffer, compose_text_val); 
-            pointer += 13;
+            pointer += 12;
         } else if (strncmp(pointer, "end", 3) == 0) {
             strncpy(write_buffer + strlen(write_buffer) - 2, end_val, strlen(end_val));
-            pointer += 10000;
+            pointer += 100000;
         } else if (strncmp(pointer, "data_blob", 9) == 0) {
             strcat(write_buffer, data_blob_val);
-            pointer += 10;
+            pointer += 9;
         } else if (strncmp(pointer, "delay", 5) == 0) {
-            pointer += 6;
+            pointer += 5;
             char delay_as_char[128] = {0};
             char* end_of_int = strstr(pointer, "\n");
             strncpy(delay_as_char, pointer, end_of_int - pointer);
@@ -463,17 +562,45 @@ void run_test(char* filepath) {
 
             pointer = end_of_int;
         } else {
-            printf("unknown value in format data\n"); exit(1);
+            printf("Unknown value in format data. Line %d. Column %ld.\nValue = \"", line, pointer - start);
+            while ( pointer < end_of_format && !(*pointer == ' ' || *pointer == '\n' || *pointer == '\t') ) {
+                printf("%c", *pointer);
+                pointer++;
+            }
+            printf("\"\n");
+            exit(1);
         }
 
-        pointer = skip_whitespace(pointer);
+        while (*pointer == ' ' || *pointer == '\n' || *pointer == '\t') {
+            if (*pointer == '\n') {
+                line++;
+                start = pointer;
+            }
+            pointer++;
+        }
     }
 
+    printf("\nPRINTING WRITE BUFFER\n");
     printf("%s", write_buffer);
-    SSL_write(ssl, write_buffer, strlen(write_buffer));
+    if (ssl_val == true) {
+        ssl_connect();
+    } else {
+        normal_connect();
+    }
+    if (strncmp(http_val, "https", 5) == 0) {
+        SSL_write(ssl, write_buffer, strlen(write_buffer));
+    } else {
+        write(server_fd, write_buffer, strlen(write_buffer));
+    }
+
     // Receive a message from the server
-    char buffer[1024] = {0};
-    int bytes = SSL_read(ssl, buffer, sizeof(buffer));
+    char buffer[10240] = {0};
+    int bytes = 0;
+    if (ssl_val == true) {
+        bytes = SSL_read(ssl, buffer, 10240);
+    } else {
+        bytes = read(server_fd, buffer, 10240);
+    }
     if (bytes > 0) {
         buffer[bytes] = 0;
         printf("Received: \"%s\"\n", buffer);
@@ -481,72 +608,11 @@ void run_test(char* filepath) {
         ERR_print_errors_fp(stderr); exit(1);
     }
 
-}
-
-
-#define SERVER "127.0.0.1"
-#define PORT 443
-
-int server_fd;
-SSL_CTX *ctx;
-
-void ssl_connect() {
-    // Create a new SSL context
-    const SSL_METHOD *method = SSLv23_client_method();
-    ctx = SSL_CTX_new(method);
-    if (!ctx) {
-        ERR_print_errors_fp(stderr);
-        exit(1);
-    }
-     // Create a new SSL connection state
-    ssl = SSL_new(ctx);
-    if (!ssl) {
-        ERR_print_errors_fp(stderr);
-        SSL_CTX_free(ctx);
-        exit(EXIT_FAILURE);
-    }
-    // Create a socket and connect to the server
-    server_fd = socket(AF_INET, SOCK_STREAM, 0);
-    if (server_fd < 0) {
-        perror("Unable to create socket");
-        SSL_free(ssl);
-        SSL_CTX_free(ctx);
-        exit(1);
-    }
-    struct sockaddr_in addr;
-    addr.sin_family = AF_INET;
-    addr.sin_port = htons(PORT);
-    if (inet_pton(AF_INET, SERVER, &addr.sin_addr) <= 0) {
-        perror("Invalid address/ Address not supported");
-        close(server_fd);
-        SSL_free(ssl);
-        SSL_CTX_free(ctx);
-        exit(1);
-    }
-    if (connect(server_fd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
-        perror("Connection failed");
-        close(server_fd);
-        SSL_free(ssl);
-        SSL_CTX_free(ctx);
-        exit(1);
-    }
-    
-    // bind socket to ssl
-    SSL_set_fd(ssl, server_fd);
-
-    // ssl handshake
-    if (SSL_connect(ssl) <= 0) {
-        ERR_print_errors_fp(stderr);
-        exit(1);
+    if (ssl_val == true) {
+        ssl_disconnect();
     } else {
-        printf("Connected to server with %s encryption\n", SSL_get_cipher(ssl));
+        close(server_fd);
     }
-}
-
-void ssl_disconnect() {
-    close(server_fd);
-    SSL_shutdown(ssl);
-    SSL_free(ssl);
 }
 
 int main() {
@@ -556,23 +622,16 @@ int main() {
     OpenSSL_add_all_algorithms();
     SSL_load_error_strings();
 
-    ssl_connect();
-
     // Init random
     srand(time(NULL));
 
+
     // Run Tests
-    run_test("random");
-    //ssl_disconnect();
-    //ssl_connect();
+    run_test("test2");
     //run_test("test2");
     
 
     // Clean up
-    SSL_shutdown(ssl);
-    SSL_free(ssl);
-    close(server_fd);
     SSL_CTX_free(ctx);
     EVP_cleanup();
-
 }
