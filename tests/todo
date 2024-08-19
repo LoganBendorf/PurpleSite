@@ -1,8 +1,2 @@
 
-Add ability to add \r\n in format
-    i.e. format {
-            header
-            content_length
-            content_type
-            boundary \r\n
-          }
+Add random, which will pick between auto, garbage, empty

@@ -1,16 +1,16 @@
-ssl = true
+ssl = random
 
-http = https
+http = random
 
-data_blob = In Test 2
+data_blob = In random test
 
-header = post
+header = random
 
 content_length = 437
 
-content_type = auto
+content_type = random
 
-boundary = --im straight up
+boundary = random
 
 username = 
 recipient = were

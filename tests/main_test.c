@@ -29,6 +29,26 @@ char* fill_with_garbage(char* buffer, int max_bytes) {
     }
 }
 
+char* find_id(char* id, char* pointer, char* filepath) {
+
+    pointer = strstr(pointer, id);
+    if (pointer == 0) {
+        printf("Failed to find id (%s). [%s]\n", id, filepath); exit(1);
+    }
+    pointer += strlen(id);
+    while (*pointer == ' ') {
+        pointer++;
+    }
+    char* quinter = strstr(pointer, "\n");
+    if (quinter == 0) {
+        printf("Failed to find ssl data. [%s]\n", filepath); exit(1);
+    }
+    if (quinter - pointer < 0) {
+        printf("Bad id (%s) data. [%s]\n", id, filepath); exit(1);
+    }
+    return pointer;
+}
+
 void run_test(char* filepath) {
     FILE* fp = fopen(filepath, "r");
     if (fp == NULL) {
@@ -49,60 +69,66 @@ void run_test(char* filepath) {
         printf("Failed to read entire test file. [%s]\n", filepath); exit(1);
     }
 
-    char* pointer = 0;
+    char* pointer = test_data;
     char* quinter = 0;
-
     // Find SSL
     //      - Must be true or false
+    //      - Can random
+    typedef enum  {
+        ssl_branch_true, ssl_branch_false, ssl_branch_ENUM_END
+    } SSL_branch;
+    SSL_branch ssl_branch = -1;
+
     char* ssl_id = "ssl =";
     bool ssl_val;
-    pointer = strstr(test_data, ssl_id);
-    if (pointer == 0) {
-        printf("Failed to find ssl. [%s]\n", filepath); exit(1);
-    }
-    pointer += strlen(ssl_id);
-    while (*pointer == ' ') {
-        pointer++;
-    }
-    quinter = strstr(pointer, "\n");
-    if (quinter == 0) {
-        printf("Failed to find ssl data. [%s]\n", filepath); exit(1);
-    }
-    if (quinter - pointer < strlen("true")) {
-        printf("Bad ssl data. [%s]\n", filepath); exit(1);
-    }
-    if (strncmp(pointer, "false", 5) == 0) {
-        ssl_val = false;
+
+    pointer = find_id(ssl_id, pointer, filepath);
+
+    if (strncmp(pointer, "random", 6) == 0) {
+        ssl_branch = rand() % ssl_branch_ENUM_END;
+    } else if (strncmp(pointer, "false", 5) == 0) {
+        ssl_branch = ssl_branch_false;
     } else if (strncmp(pointer, "true", 4) == 0) {
-        ssl_val = true;
+        ssl_branch = ssl_branch_true;
     } else{
         printf("Bad ssl data. [%s]\n", filepath); exit(1);
+    }
+
+    switch (ssl_branch) {
+        case ssl_branch_true: ssl_val = true; break;
+        case ssl_branch_false: ssl_val = false; break;
+        default: printf("Bad ssl data. [%s]\n", filepath); exit(1);
     }
 
     printf("ssl = %s\n", ssl_val ? "true" : "false");
 
     // Find http
     //      - Must be http or https
+    //      - Can be random
+    typedef enum  {
+        http_branch_http, http_branch_https, http_branch_ENUM_END
+    } HTTP_branch;
+    HTTP_branch http_branch = -1;
+
     char* http_id = "http =";
     char http_val[32] = {0};
-    pointer = strstr(quinter, http_id);
-    if (pointer == 0) {
-        printf("Failed to find http. [%s]\n", filepath); exit(1);
-    }
-    pointer += strlen(http_id);
-    while (*pointer == ' ') {
-        pointer++;
-    }
-    quinter = strstr(pointer, "\n");
-    if (quinter == 0 /*|| quinter - pointer <= strlen("http")*/) {
-        printf("Failed to find http data. [%s]\n", filepath); exit(1);
-    }
-    if (strncmp(pointer, "https", 5) == 0) {
-        strcpy(http_val, "https");
+
+    pointer = find_id(http_id, pointer, filepath);
+
+    if (strncmp(pointer, "random", 6) == 0) {
+        http_branch = rand() % http_branch_ENUM_END;
+    } else if (strncmp(pointer, "https", 5) == 0) {
+        http_branch = http_branch_https;
     } else if (strncmp(pointer, "http", 4) == 0) {
-        strcpy(http_val, "http");
+        http_branch = http_branch_http;
     } else {
         printf("Bad http data. [%s]\n", filepath); exit(1);
+    }
+
+    switch (http_branch) {
+        case http_branch_http: strcpy(http_val, "http"); break;
+        case http_branch_https: strcpy(http_val, "https"); break;
+        default: printf("Bad http data. [%s]\n", filepath); exit(1);
     }
 
     printf("http = %s\n", http_val);
@@ -111,7 +137,8 @@ void run_test(char* filepath) {
     //      - Can be empty
     char* data_blob_id = "data_blob =";
     char data_blob_val[1024] = {0};
-    pointer = strstr(quinter, data_blob_id);
+
+    pointer = strstr(pointer, data_blob_id);
     if (pointer == 0) {
         printf("Failed to find data_blob. [%s]\n", filepath); exit(1);
     }
@@ -120,6 +147,7 @@ void run_test(char* filepath) {
         pointer++;
     }
     quinter = strstr(pointer, "\n");
+
     strncpy(data_blob_val, pointer, quinter - pointer);
 
     printf("data_blob = %s\n", data_blob_val);
@@ -127,42 +155,56 @@ void run_test(char* filepath) {
     // Find header
     //      - Can be empty
     //      - Can be garbage
-    //      - get can have second value, which can be garbage
+    //      - "get" can have second value, which can be "garbage"
+    //      - Can be random
+    typedef enum  {
+        header_branch_empty, header_branch_garbage, header_branch_post, header_branch_get, header_branch_ENUM_END
+    } HEADER_branch;
+    HEADER_branch header_branch = -1;
+
     char* header_id = "header =";
     char header_val[1024] = {0};
-    pointer = strstr(quinter, header_id);
-    if (pointer == 0) {
-        printf("Failed to find header. [%s]\n", filepath); exit(1);
-    }
-    pointer += strlen(header_id);
-    while (*pointer == ' ') {
-        pointer++;
-    }
-    quinter = strstr(pointer, "\n");
-    if (quinter == 0) {
-        printf("Failed to find header data. [%s]\n", filepath); exit(1);
-    }
-    if (strncmp(pointer, "garbage", 7) == 0) {
-        fill_with_garbage(header_val, 1024);
+
+    pointer = find_id(header_id, pointer, filepath);
+
+    if (strncmp(pointer, "random", 6) == 0) {
+        header_branch = rand() % header_branch_ENUM_END;
+    } else if (strncmp(pointer, "garbage", 7) == 0) {
+        header_branch = header_branch_garbage;
     } else if (strncmp(pointer, "post", 4) == 0) {
-        strcpy(header_val, "POST / HTTP/1.1\r\n");
+        header_branch = header_branch_post;
     } else if (strncmp(pointer, "get", 3) == 0) {
-        pointer += strlen("get");
-        if (pointer < quinter) {
-            pointer += 1;  
-            char file_to_get[1024] = {0};
-            strcpy(header_val, "GET /");
-            if (strncmp(pointer, "garbage", 7) == 0) {
-                fill_with_garbage(file_to_get, 40);
-            } else {
-                strncpy(file_to_get, pointer, quinter - pointer);
-            }
-            strcat(header_val, file_to_get);
-            strcat(header_val, " HTTP/1.1\r\n");
-        } else {
-            strcpy(header_val, "GET / HTTP/1.1\r\n");
-        }
+        header_branch = header_branch_get;
     } 
+
+    switch (header_branch) {
+        case header_branch_garbage: fill_with_garbage(header_val, 1024); break;
+        case header_branch_post: strcpy(header_val, "POST / HTTP/1.1\r\n"); break;
+        case header_branch_get: 
+            // Have to calculate quinter first or it might skip to the next line
+            quinter = strstr(pointer, "\n");
+            while ( !(*pointer == ' ' || *pointer == '\n') ) {
+                pointer++;
+            }
+            while (*pointer == ' ') {
+                pointer++;
+            }
+            if (pointer < quinter) {
+                char file_to_get[1024] = {0};
+                strcpy(header_val, "GET /");
+                if (strncmp(pointer, "garbage", 7) == 0) {
+                    // Can't fill with too much garbage or overflow when strcatting
+                    fill_with_garbage(file_to_get, 900);
+                } else {
+                    strncpy(file_to_get, pointer, quinter - pointer);
+                }
+                strcat(header_val, file_to_get);
+                strcat(header_val, " HTTP/1.1\r\n");
+            } else {
+                strcpy(header_val, "GET / HTTP/1.1\r\n");
+            }
+        default: break;
+    }
 
     printf("header = %s\n", header_val);
 
@@ -171,23 +213,15 @@ void run_test(char* filepath) {
     //      - Can be auto (not now)
     char* content_length_id = "content_length =";
     char content_length_val[1024] = {0};
-    pointer = strstr(quinter, content_length_id);
-    if (pointer == 0) {
-        printf("Failed to find content_length. [%s]\n", filepath); exit(1);
-    }
-    pointer += strlen(content_length_id);
-    while (*pointer == ' ') {
-        pointer++;
-    }
-    quinter = strstr(pointer, "\n");
-    if (quinter == 0) {
-        printf("Failed to find content_length data. [%s]\n", filepath); exit(1);
-    }
+
+    pointer = find_id(content_length_id, pointer, filepath);
+    
     if (strncmp(pointer, "auto", 4) == 0) {
         printf("Auto not implemented yet smile\n"); exit(1);
     } else {
         strcpy(content_length_val, "Content-Length: ");
         char length_numerical_val[128] = {0};
+        quinter = strstr(pointer, "\n");
         strncpy(length_numerical_val, pointer, quinter - pointer);
         strcat(content_length_val, length_numerical_val);
         strcat(content_length_val, "\r\n");
@@ -199,26 +233,32 @@ void run_test(char* filepath) {
     //      - Can be empty
     //      - Can be garbage
     //      - Can be auto
+    //      - Can be random
+    typedef enum  {
+        content_type_branch_empty, content_type_branch_garbage, content_type_branch_auto, content_type_branch_ENUM_END
+    } CONTENT_TYPE_branch;
+    CONTENT_TYPE_branch content_type_branch = -1;
+    
     char* content_type_id = "content_type =";
     char content_type_val[1024] = {0};
-    pointer = strstr(quinter, content_type_id);
-    if (pointer == 0) {
-        printf("Failed to find content_type. [%s]\n", filepath); exit(1);
-    }
-    pointer += strlen(content_type_id);
-    while (*pointer == ' ') {
-        pointer++;
-    }
-    quinter = strstr(pointer, "\n");
-    if (quinter == 0) {
-        printf("Failed to find content_type data. [%s]\n", filepath); exit(1);
-    }
-    if (strncmp(pointer, "garbage", 7) == 0) {
-        fill_with_garbage(content_type_val, 1024);
+
+    pointer = find_id(content_type_id, pointer, filepath);
+
+    if (strncmp(pointer, "random", 6) == 0) {
+        content_type_branch = rand() % content_type_branch_ENUM_END;
+    } else if (strncmp(pointer, "garbage", 7) == 0) {
+        content_type_branch = content_type_branch_garbage;
     } else if (strncmp(pointer, "auto", 4) == 0) {
-        strcpy(content_type_val, "Content-Type: multipart/form-data; boundary=");
-    } else {
-        strncpy(content_type_val, pointer, quinter - pointer);
+        content_type_branch = content_type_branch_auto;
+    }
+
+    switch (content_type_branch) {
+        case content_type_branch_empty: break;
+        case content_type_branch_garbage: fill_with_garbage(content_type_val, 1024); break;
+        case content_type_branch_auto: strcpy(content_type_val, "Content-Type: multipart/form-data; boundary="); break;
+        default: 
+            quinter = strstr(pointer, "\n");
+            strncpy(content_type_val, pointer, quinter - pointer);
     }
 
     printf("content_type = %s\n", content_type_val);
@@ -227,31 +267,39 @@ void run_test(char* filepath) {
     //      - Can be empty
     //      - Can be garbage
     //      - Can be auto
+    //      - Can be random
+    typedef enum  {
+        boundary_branch_empty, boundary_branch_garbage, boundary_branch_auto, boundary_branch_ENUM_END
+    } BOUNDARY_branch;
+    BOUNDARY_branch boundary_branch = -1;
+
     typedef enum {
         CUSTOM, AUTO
     } BOUNDARY_TYPYE;
     char* boundary_id = "boundary =";
     char boundary_val[1024] = {0};
     BOUNDARY_TYPYE boundary_type = CUSTOM;
-    pointer = strstr(quinter, boundary_id);
-    if (pointer == 0) {
-        printf("Failed to find boundary. [%s]\n", filepath); exit(1);
-    }
-    pointer += strlen(boundary_id);
-    while (*pointer == ' ') {
-        pointer++;
-    }
-    quinter = strstr(pointer, "\n");
-    if (quinter == 0) {
-        printf("Failed to find boundary data. [%s]\n", filepath); exit(1);
-    }
-    if (strncmp(pointer, "garbage", 7) == 0) {
-        fill_with_garbage(boundary_val, 1024);
+
+    pointer = find_id(boundary_id, pointer, filepath);
+
+    if (strncmp(pointer, "random", 6) == 0) {
+        boundary_branch = rand() % boundary_branch_ENUM_END;
+    } else if (strncmp(pointer, "garbage", 7) == 0) {
+        boundary_branch = boundary_branch_garbage;
     } else if (strncmp(pointer, "auto", 4) == 0) {
-        strcpy(boundary_val, "------WebKitFormBoundary9NJ1haiCuCNLrSLJ\r\n");
-        boundary_type = AUTO;
-    } else {
-        strncpy(boundary_val, pointer, quinter - pointer);
+        boundary_branch = boundary_branch_auto;
+    }
+
+    switch (boundary_branch) {
+        case boundary_branch_empty: break;
+        case boundary_branch_garbage: fill_with_garbage(boundary_val, 1024); break;
+        case boundary_branch_auto: 
+            strcpy(boundary_val, "------WebKitFormBoundary9NJ1haiCuCNLrSLJ\r\n");
+            boundary_type = AUTO;
+            break;
+        default: 
+            quinter = strstr(pointer, "\n");
+            strncpy(boundary_val, pointer, quinter - pointer);
     }
 
     printf("boundary = %s\n", boundary_val);
@@ -261,23 +309,15 @@ void run_test(char* filepath) {
     //      - Can be garbage
     char* username_id = "username =";
     char username_val[1024] = {0};
-    pointer = strstr(quinter, username_id);
-    if (pointer == 0) {
-        printf("Failed to find username. [%s]\n", filepath); exit(1);
-    }
-    pointer += strlen(username_id);
-    while (*pointer == ' ') {
-        pointer++;
-    }
-    quinter = strstr(pointer, "\n");
-    if (quinter == 0) {
-        printf("Failed to find username data. [%s]\n", filepath); exit(1);
-    }
+
+    pointer = find_id(username_id, pointer, filepath);
+
     if (strncmp(pointer, "garbage", 7) == 0) {
         fill_with_garbage(username_val, 1024);
     } else {
         strcpy(username_val, "Content-Disposition: form-data; name=\"username\"\r\n");
         char username_buffer[1024] = {0};
+        quinter = strstr(pointer, "\n");
         strncpy(username_buffer, pointer, quinter - pointer);
         strcat(username_val, username_buffer);
         strcat(username_val, "\r\n");
@@ -290,23 +330,15 @@ void run_test(char* filepath) {
     //      - Can be garbage
     char* recipient_id = "recipient =";
     char recipient_val[1024] = {0};
-    pointer = strstr(quinter, recipient_id);
-    if (pointer == 0) {
-        printf("Failed to find recipient. [%s]\n", filepath); exit(1);
-    }
-    pointer += strlen(recipient_id);
-    while (*pointer == ' ') {
-        pointer++;
-    }
-    quinter = strstr(pointer, "\n");
-    if (quinter == 0) {
-        printf("Failed to find recipient data. [%s]\n", filepath); exit(1);
-    }
+
+    pointer = find_id(recipient_id, pointer, filepath);
+
     if (strncmp(pointer, "garbage", 7) == 0) {
         fill_with_garbage(recipient_val, 1024);
     } else {
         strcpy(recipient_val, "Content-Disposition: form-data; name=\"recipient\"\r\n");
         char recipient_buffer[1024] = {0};
+        quinter = strstr(pointer, "\n");
         strncpy(recipient_buffer, pointer, quinter - pointer);
         strcat(recipient_val, recipient_buffer);
         strcat(recipient_val, "\r\n");
@@ -319,23 +351,15 @@ void run_test(char* filepath) {
     //      - Can be garbage
     char* title_id = "title =";
     char title_val[1024] = {0};
-    pointer = strstr(quinter, title_id);
-    if (pointer == 0) {
-        printf("Failed to find title. [%s]\n", filepath); exit(1);
-    }
-    pointer += strlen(title_id);
-    while (*pointer == ' ') {
-        pointer++;
-    }
-    quinter = strstr(pointer, "\n");
-    if (quinter == 0) {
-        printf("Failed to find title data. [%s]\n", filepath); exit(1);
-    }
+
+    pointer = find_id(title_id, pointer, filepath);
+
     if (strncmp(pointer, "garbage", 7) == 0) {
         fill_with_garbage(title_val, 1024);
     } else {
         strcpy(title_val, "Content-Disposition: form-data; name=\"title\"\r\n");
         char title_buffer[1024] = {0};
+        quinter = strstr(pointer, "\n");
         strncpy(title_buffer, pointer, quinter - pointer);
         strcat(title_val, title_buffer);
         strcat(title_val, "\r\n");
@@ -348,23 +372,15 @@ void run_test(char* filepath) {
     //      - Can be garbage
     char* compose_text_id = "compose_text =";
     char compose_text_val[1024] = {0};
-    pointer = strstr(quinter, compose_text_id);
-    if (pointer == 0) {
-        printf("Failed to find compose_text. [%s]\n", filepath); exit(1);
-    }
-    pointer += strlen(compose_text_id);
-    while (*pointer == ' ') {
-        pointer++;
-    }
-    quinter = strstr(pointer, "\n");
-    if (quinter == 0) {
-        printf("Failed to find compose_text data. [%s]\n", filepath); exit(1);
-    }
+
+    pointer = find_id(compose_text_id, pointer, filepath);
+
     if (strncmp(pointer, "garbage", 7) == 0) {
         fill_with_garbage(compose_text_val, 1024);
     } else {
         strcpy(compose_text_val, "Content-Disposition: form-data; name=\"composeText\"\r\n");
         char compose_text_buffer[1024] = {0};
+        quinter = strstr(pointer, "\n");
         strncpy(compose_text_buffer, pointer, quinter - pointer);
         strcat(compose_text_val, compose_text_buffer);
         strcat(compose_text_val, "\r\n");
@@ -462,7 +478,7 @@ void run_test(char* filepath) {
         buffer[bytes] = 0;
         printf("Received: \"%s\"\n", buffer);
     } else {
-        ERR_print_errors_fp(stderr);
+        ERR_print_errors_fp(stderr); exit(1);
     }
 
 }
@@ -514,9 +530,11 @@ void ssl_connect() {
         SSL_CTX_free(ctx);
         exit(1);
     }
-    // Associate the socket with the SSL connection
+    
+    // bind socket to ssl
     SSL_set_fd(ssl, server_fd);
-    // Perform the SSL/TLS handshake with the server
+
+    // ssl handshake
     if (SSL_connect(ssl) <= 0) {
         ERR_print_errors_fp(stderr);
         exit(1);
@@ -544,7 +562,7 @@ int main() {
     srand(time(NULL));
 
     // Run Tests
-    run_test("test3");
+    run_test("random");
     //ssl_disconnect();
     //ssl_connect();
     //run_test("test2");

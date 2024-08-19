@@ -8,7 +8,7 @@ header = get
 
 content_length = 437
 
-content_type = auto
+content_type = auto 
 
 boundary = auto
 
