@@ -1,0 +1,36 @@
+ssl = true  
+
+http = https
+
+data_blob = In post test
+
+header = post
+
+content_length = 437
+
+content_type = auto
+
+boundary = auto
+
+username = Test
+recipient = post
+title = hello
+compose_text = text
+
+format {
+    header
+    delay 12345
+    content_length
+    content_type
+    boundary
+    username
+    boundary
+    recipient
+    boundary
+    title
+    boundary
+    compose_text \r\n
+    boundary \r\n
+    end
+}
+

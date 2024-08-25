@@ -149,6 +149,10 @@ char* find_id(char* id, char* pointer, char* filepath) {
 }
 
 void run_test(char* filepath) {
+
+    printf("\n    |Test: %s|\n", filepath);
+    printf("    |Locating data|\n");
+
     FILE* fp = fopen(filepath, "r");
     if (fp == NULL) {
         printf("File failed to open. [%s]\n", filepath); exit(1);
@@ -506,72 +510,134 @@ void run_test(char* filepath) {
         printf("Failed to find format data. [%s]\n", filepath); exit(1);
     }
 
+    printf("    |Formating data|\n");
+
+    typedef enum  {
+        format_option_bsr_bsn,
+        format_option_header, 
+        format_option_content_length,
+        format_option_content_type,
+        format_option_boundary,
+        format_option_username,
+        format_option_recipient,
+        format_option_title,
+        format_option_compose_text,
+        format_option_end,
+        format_option_data_blob,
+        format_option_delay,
+        format_option_ENUM_END
+    } FORMAT_options;
+    FORMAT_options format_option = -1;
+
     int line = 1;
     char* start = pointer;
     char write_buffer[10240] = {0};
 
     while (pointer < end_of_format) {
 
-        if (strncmp(pointer, "\\r\\n", 4) == 0) {
-            strcat(write_buffer, "\r\n");
-            pointer += 4;
-            printf("added \\r\\n\n");
+        if (strncmp(pointer, "random", 6) == 0) {
+            format_option = rand() % format_option_ENUM_END;
+        } else if (strncmp(pointer, "\\r\\n", 4) == 0) {
+            format_option = format_option_bsr_bsn;
         } else if (strncmp(pointer, "header", 6) == 0) {
-            strcat(write_buffer, header_val);
-            pointer += 6;
+            format_option = format_option_header;            
         } else if (strncmp(pointer, "content_length", 14) == 0) {
-            strcat(write_buffer, content_length_val);
-            pointer += 14;
+            format_option = format_option_content_length; 
         } else if (strncmp(pointer, "content_type", 12) == 0) {
-            strcat(write_buffer, content_type_val); 
-            strcat(write_buffer, boundary_val + 2);
-            pointer += 12;
+            format_option = format_option_content_type; 
         } else if (strncmp(pointer, "boundary", 8) == 0) {
-            strcat(write_buffer, boundary_val); 
-            pointer += 8;
+            format_option = format_option_boundary; 
         } else if (strncmp(pointer, "username", 8) == 0) {
-            strcat(write_buffer, username_val); 
-            pointer += 8;
+            format_option = format_option_username; 
         } else if (strncmp(pointer, "recipient", 9) == 0) {
-            strcat(write_buffer, recipient_val); 
-            pointer += 9;
+            format_option = format_option_recipient; 
         } else if (strncmp(pointer, "title", 5) == 0) {
-            strcat(write_buffer, title_val);
-            pointer += 5;
+            format_option = format_option_title; 
         } else if (strncmp(pointer, "compose_text", 12) == 0) {
-            strcat(write_buffer, compose_text_val); 
-            pointer += 12;
+            format_option = format_option_compose_text; 
         } else if (strncmp(pointer, "end", 3) == 0) {
-            strncpy(write_buffer + strlen(write_buffer) - 2, end_val, strlen(end_val));
-            pointer += 100000;
+            format_option = format_option_end; 
         } else if (strncmp(pointer, "data_blob", 9) == 0) {
-            strcat(write_buffer, data_blob_val);
-            pointer += 9;
+            format_option = format_option_data_blob; 
         } else if (strncmp(pointer, "delay", 5) == 0) {
-            pointer += 5;
-            char delay_as_char[128] = {0};
-            char* end_of_int = strstr(pointer, "\n");
-            strncpy(delay_as_char, pointer, end_of_int - pointer);
-            int delay = 0;
-            delay = atoi(delay_as_char);
-
-            // for now cause we're not sending anything
-            strcat(write_buffer, "!!!!! delay ");
-            strcat(write_buffer, delay_as_char);
-            strcat(write_buffer, " !!!!!\n");
-
-            pointer = end_of_int;
-        } else {
-            printf("Unknown value in format data. Line %d. Column %ld.\nValue = \"", line, pointer - start);
-            while ( pointer < end_of_format && !(*pointer == ' ' || *pointer == '\n' || *pointer == '\t') ) {
-                printf("%c", *pointer);
-                pointer++;
-            }
-            printf("\"\n");
-            exit(1);
+            format_option = format_option_delay; 
         }
 
-        while (*pointer == ' ' || *pointer == '\n' || *pointer == '\t') {
+        printf("option = %d\n", format_option);
+
+        switch (format_option) {
+            case format_option_bsr_bsn:
+                strcat(write_buffer, "\r\n");
+                pointer += 4;
+                break;
+            case format_option_header:
+                strcat(write_buffer, header_val);
+                pointer += 6;
+                break;
+            case format_option_content_length:
+                strcat(write_buffer, content_length_val);
+                pointer += 14;
+                break;
+            case format_option_content_type:
+                strcat(write_buffer, content_type_val); 
+                strcat(write_buffer, boundary_val + 2);
+                pointer += 12;
+                break;
+            case format_option_boundary:
+                strcat(write_buffer, boundary_val); 
+                pointer += 8;
+                break;
+            case format_option_username:
+                strcat(write_buffer, username_val); 
+                pointer += 8;
+                break;
+            case format_option_recipient:
+                strcat(write_buffer, recipient_val); 
+                pointer += 9;
+                break;
+            case format_option_title:
+                strcat(write_buffer, title_val);
+                pointer += 5;
+                break;
+            case format_option_compose_text:
+                strcat(write_buffer, compose_text_val); 
+                pointer += 12;
+                break;
+            case format_option_end:
+                strncpy(write_buffer + strlen(write_buffer) - 2, end_val, strlen(end_val));
+                pointer += 100000;
+                break;
+            case format_option_data_blob:
+                strcat(write_buffer, data_blob_val);
+                pointer += 9;
+                break;
+            case format_option_delay:
+                pointer += 5;
+                char delay_as_char[128] = {0};
+                char* end_of_int = strstr(pointer, "\n");
+                strncpy(delay_as_char, pointer, end_of_int - pointer);
+                int delay = 0;
+                delay = atoi(delay_as_char);
+
+                // for now cause we're not sending anything
+                strcat(write_buffer, "!!!!! delay ");
+                strcat(write_buffer, delay_as_char);
+                strcat(write_buffer, " !!!!!\n");
+
+                pointer = end_of_int;
+                
+                break;
+            default: 
+                printf("Unknown value in format data. Line %d. Column %ld.\nValue = \"", line, pointer - start + 1);
+                while ( pointer < end_of_format && !(*pointer == ' ' || *pointer == '\n' || *pointer == '\t') ) {
+                    printf("%c", *pointer);
+                    pointer++;
+                }
+                printf("\"\n");
+                exit(1);
+        }
+
+        while ( (pointer < end_of_format) && (*pointer == ' ' || *pointer == '\n' || *pointer == '\t') ) {
             if (*pointer == '\n') {
                 line++;
                 start = pointer;
@@ -580,7 +646,7 @@ void run_test(char* filepath) {
         }
     }
 
-    printf("\nPRINTING WRITE BUFFER\n");
+    printf("\n    |Printing write buffer|\n");
     printf("%s", write_buffer);
     if (ssl_val == true) {
         ssl_connect();
@@ -627,9 +693,10 @@ int main() {
 
 
     // Run Tests
-    run_test("test2");
-    //run_test("test2");
-    
+    //run_test("post");
+    //run_test("random_format");
+    run_test("full_random\n");
+
 
     // Clean up
     SSL_CTX_free(ctx);
