@@ -12,12 +12,13 @@
 // should only put kosher strings into this function
 int hash_function(char* string) {
     
-    unsigned char copy_string[1024];
+    unsigned char copy_string[1024] = {0};
     strcpy(copy_string, string);
     for (int i = 0; i < strlen(string); i++) {
         copy_string[i] = tolower(copy_string[i]);
     }
     printf("hash_function() received: %s\n", copy_string);
+    
     int hash = 5381;
     for (int i = 0; i < strlen(string); i++) {
 
@@ -69,14 +70,19 @@ int hash_function(char* string) {
 void hash_profanity_list(int profanity_hash_list[], char* profanity_list[], int* max_size_profanity, int* min_size_profanity) {
     printf("\nPRINTING PROFANITY\n");
     FILE* file = fopen("profanity.txt", "r");
-    int iter = 0;
-    char line[64];
+    int i = 0;
+    char line[64] = {0};
     while (fgets(line, 64, file)) {
-        profanity_list[iter] = calloc(1, strlen(line)-1);
-        strncpy(profanity_list[iter], line, strlen(line)-1);
+        if (i == 127) { // size of profanity_ist is 128, last slot need to be 0
+            printf("too much profanity\n");
+            exit(1);
+        }
+
+        profanity_list[i] = calloc(1, strlen(line)-1);
+        strncpy(profanity_list[i], line, strlen(line)-1);
         int size = strlen(line) - 1;
-        profanity_list[iter][size] = 0;
-        printf("strlen(line) = %d\n", size);
+        profanity_list[i][size] = 0;
+        printf("size = %d\n", size);
         //printf("max_size_profanity = %d\n", *max_size_profanity);
 
         if (size < *min_size_profanity) {
@@ -87,16 +93,16 @@ void hash_profanity_list(int profanity_hash_list[], char* profanity_list[], int*
             *max_size_profanity = size;
             printf("max_size_profanity changed to %d\n", size);
         }
-        printf("added %s to profanity list\n", profanity_list[iter]);
-        iter++;
+        printf("added %s to profanity list\n", profanity_list[i]);
+        i++;
     }
     fclose(file);
 
-    iter = 0;
-    while (profanity_list[iter] != 0) {
-        profanity_hash_list[iter] = hash_function(profanity_list[iter]);
-        printf("hashed %s as %d\n", profanity_list[iter], profanity_hash_list[iter]);
-        iter++;
+    i = 0;
+    while (profanity_list[i] != 0) {
+        profanity_hash_list[i] = hash_function(profanity_list[i]);
+        printf("hashed %s as %d\n", profanity_list[i], profanity_hash_list[i]);
+        i++;
     }
     printf("DONE ADDING PROFANITY\n\n");
 }
@@ -118,10 +124,12 @@ bool contains_profanity(char* string, int profanity_hash_list[], char* profanity
         quinter = i;
         while (quinter <= strlen(bad_msg_buffer)) {
             printf("in while loop\n");
+
             strcpy(temp, bad_msg_buffer);
             temp[quinter + 1] = 0;
             int hash = hash_function(temp + pointer);
             printf("hash = %d\n", hash);
+            
             int j = 0;
             while (profanity_hash_list[j] != 0) {
                 if (hash == profanity_hash_list[j]) {

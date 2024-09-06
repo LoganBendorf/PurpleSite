@@ -1,0 +1,2 @@
+user_creation: makefile user_creation.c ../../resource_handlers.c
+	gcc -o user_creation user_creation.c ../../resource_handlers.c ../../hash_functions.c ../../connection_helpers.c ../../send_status.c -lcrypto -lssl -g

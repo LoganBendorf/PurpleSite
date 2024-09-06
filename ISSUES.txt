@@ -4,4 +4,8 @@
 
 # If someone connects and doesn't send anything I think they stay connceted forever blocking everything
     Could add time connected to client DS and kick them out after a while
-    
+
+# Can't handle small consecuative writes
+    increase fail count??
+    Although if the server thinks the client sent enough data, it blocks the client forever if the client thinks it sent everything
+        need a timer for that

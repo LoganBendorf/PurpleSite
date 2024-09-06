@@ -64,6 +64,7 @@ struct client_info* get_client(int socket, struct client_info** clientsPtr) {
 
     struct client_info* clients = *clientsPtr;
 
+    // reduntant? why not just change ci to clients?
     struct client_info* ci = clients;
 
     while (ci) {
@@ -75,7 +76,7 @@ struct client_info* get_client(int socket, struct client_info** clientsPtr) {
     struct client_info* new = (struct client_info*) calloc(1, sizeof(struct client_info));
 
     if (!new) {
-        fprintf(stderr, "get_client(). Out of memory?, returning NULL\n");
+        fprintf(stderr, "get_client() fail. Out of memory?, returning NULL\n");
         return NULL;
     }
 

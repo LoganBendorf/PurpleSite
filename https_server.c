@@ -62,7 +62,7 @@ struct email {
 bool server_should_close = false;
 int min_size_profanity = 999;
 int max_size_profanity = -1;
-// if num of profanity is > 127, crash
+// if num of profanity is > 127, die
 // String pointers are calloced
 char* profanity_list[128] = {0};
 int profanity_hash_list[128] = {0};
@@ -112,6 +112,7 @@ int main(int argc, char* argv[]) {
     // Default timeout is 300 seconds
     SSL_CTX_set_timeout(ctx, 10);
 
+    // Probably should hide these
     if (!SSL_CTX_use_certificate_file(ctx, "/etc/letsencrypt/live/www.purplesite.skin/cert.pem", SSL_FILETYPE_PEM)
         || !SSL_CTX_use_PrivateKey_file(ctx, "/etc/letsencrypt/live/www.purplesite.skin/privkey.pem", SSL_FILETYPE_PEM)) {
         fprintf(stderr, "SSLL_CTX_use_certificate_file() failed.\n");
@@ -126,6 +127,7 @@ int main(int argc, char* argv[]) {
     } else {
         server = create_socket(0, argv[1]);
     }
+    // http is just for redirect to https
     int http = create_socket(0, "80");
 
     // drop root privileges if root
@@ -160,7 +162,7 @@ int main(int argc, char* argv[]) {
         printf("After wait_on_clients() clients = %p\n", clients);
         #endif
 
-        // use poll() instead
+        // use poll() instead for http
         /*fd_set http_reads;
         http_reads = wait_on_clients(http, &clients);
         struct timeval timeout;
@@ -345,6 +347,7 @@ int main(int argc, char* argv[]) {
 #if PRINT_FILE_TYPE == true
 #define return type =
 #endif
+
 const char* get_content_type(const char* path) {
 
     const char* last_dot = strrchr(path, '.');
@@ -466,15 +469,17 @@ void handle_post(struct client_info* client) {
     
     printf("handle_post() \n");
 
-    if (strncmp(client->request, "POST / HTTP/1.1\r\n", 17) != 0) {
+    char* end = client->received + client->request;
+    char* pointer = client->request;
+    char* quinter;
+    
+    // pointer + 17 >= end is untested, might reject valid posts
+    if (pointer + 17 >= end || strncmp(client->request, "POST / HTTP/1.1\r\n", 17) != 0) {
         printf("First post line malformed\n");
         send_400(client, &clients, NULL);
         return;
     }
 
-    char* end = client->received + client->request;
-    char* pointer = client->request;
-    char* quinter;
     // FIND CONTENT LENGTH
     #define contentLengthFail(x) printf("Failed to parse content length. Line %d\n", x); \
         send_400(client, &clients, NULL); \
@@ -586,39 +591,42 @@ void handle_post(struct client_info* client) {
 
     // LOCATE CONTENT
     #define locateContentFail(x, y) printf("Failed to locate content. Line %d\n", x); \
+        if (y != 0) { \
+            printf("Error = %s\n", y); \
+        } \
         if ((pointer - client->request) < contentLength && client->parseFailures < 2) {\
-            printf("\nClient did not send enough data\n\n"); \
+            printf("parse failure incremented\n"); \
             client->parseFailures += 1; \
             return; \
         }\
+        printf("max parse failures\n"); \
         send_400(client, &clients, y); \
-        return
+        return; \
 
     // GET USERNAME ///////////////////////////////////////////////
     if (pointer >= end) {
-        locateContentFail(__LINE__, NULL);
+        locateContentFail(__LINE__, "");
     }
     quinter = strstr(pointer, boundary);
     if (quinter == 0) {
         printf("boundary = %s\n", boundary);
         printf("pointer: %.*s\n", 10, pointer);
-        locateContentFail(__LINE__, NULL);
+        locateContentFail(__LINE__, "");
     }  
     pointer = quinter;
     pointer += strlen(boundary);
     if (strncmp(pointer, "\r\n", 2) != 0) {
         fprintf(stderr, "pointer = %s\n", pointer);
-        locateContentFail(__LINE__, NULL);
+        locateContentFail(__LINE__, "");
     }
     pointer += 2;
 
     if (strncmp(pointer, "Content-Disposition: form-data; name=\"username\"", 47) != 0) {
-        printf("penis");
-        locateContentFail(__LINE__, NULL);
+        locateContentFail(__LINE__, "content-disposition username line not found\n");
     }
     pointer += 47;
     if (strncmp(pointer, "\r\n", 2) != 0) {
-        locateContentFail(__LINE__, NULL);
+        locateContentFail(__LINE__, "content-disposition username line \\r\\n delimiter not found\n");
     }
     pointer += 2;
 
@@ -633,15 +641,17 @@ void handle_post(struct client_info* client) {
     while (*pointer == ' ' || *pointer == '\t' || *pointer == '\n' || *pointer == '\r'){
         pointer++;
         if (pointer >= end) {
-            locateContentFail(__LINE__, NULL);
+            locateContentFail(__LINE__, "");
         }
     }
     if (quinter - pointer > MAX_NAME_BYTES) {
         printf("pointer = %p\n", pointer);
         printf("quinter = %p\n", quinter);
-        locateContentFail(__LINE__, NULL);
+        locateContentFail(__LINE__, "");
     }
     
+    // Removes whitespace from the middle so Mike and M ike are the same in the database,
+    //      should probably also tolower() it
     char username[MAX_NAME_BYTES + 1];
     for (int i = 0; i < quinter - pointer; i++) {
         if (*pointer == ' ' || *pointer == '\t' || *pointer == '\n' || *pointer == '\r'){
@@ -691,36 +701,36 @@ void handle_post(struct client_info* client) {
 
     pointer = strstr(quinter, "\r\n");
     if (pointer == 0) {
-        locateContentFail(__LINE__, NULL);
+        locateContentFail(__LINE__, "");
     }
     pointer += 2;
     // END USERNAME ///////////////////////////////////////////////
 
     // GET RECIPIENT ////////////////////////////////////////////////
     if (strncmp(pointer, "Content-Disposition: form-data; name=\"recipient\"", 48) != 0) {
-        locateContentFail(__LINE__, NULL);
+        locateContentFail(__LINE__, "");
     }
     pointer += 48;
 
     if (strncmp(pointer, "\r\n", 2) != 0) {
-        locateContentFail(__LINE__, NULL);
+        locateContentFail(__LINE__, "");
     }
     pointer += 2;
 
     quinter = strstr(pointer, boundary);
     if (quinter - pointer <= 2 || quinter - pointer > MAX_NAME_BYTES + 2) {
-        locateContentFail(__LINE__, NULL);
+        locateContentFail(__LINE__, "");
     }
 
     // Should skip through whitespace
     while (*pointer == ' ' || *pointer == '\t' || *pointer == '\n' || *pointer == '\r'){
         pointer++;
         if (pointer >= end) {
-            locateContentFail(__LINE__, NULL);
+            locateContentFail(__LINE__, "");
         }
     }
     if (quinter - pointer > MAX_NAME_BYTES) {
-        locateContentFail(__LINE__, NULL);
+        locateContentFail(__LINE__, "");
     }
     char recipient[MAX_NAME_BYTES + 1];
     for (int i = 0; i < quinter - pointer; i++) {
@@ -791,32 +801,32 @@ void handle_post(struct client_info* client) {
 
     pointer = strstr(quinter, "\r\n");
     if (pointer == 0) {
-        locateContentFail(__LINE__, NULL);
+        locateContentFail(__LINE__, "");
     }
     pointer += 2;
     // END RECIPIENT ////////////////////////////
 
     // GET TITLE ////////////////////////////////////////////////
     if (strncmp(pointer, "Content-Disposition: form-data; name=\"title\"", 44) != 0) {
-        locateContentFail(__LINE__, NULL);
+        locateContentFail(__LINE__, "");
     }
     pointer += 44;
 
     if (strncmp(pointer, "\r\n", 2) != 0) {
-        locateContentFail(__LINE__, NULL);
+        locateContentFail(__LINE__, "");
     }
     pointer += 2;
 
     quinter = strstr(pointer, boundary);
     if (quinter - pointer <= 2 || quinter - pointer > MAX_TITLE_BYTES) {
-        locateContentFail(__LINE__, NULL);
+        locateContentFail(__LINE__, "");
     }
 
     // Should skip through whitespace
     while (*pointer == ' ' || *pointer == '\t' || *pointer == '\n' || *pointer == '\r') {
         pointer++;
         if (pointer >= end) {
-            locateContentFail(__LINE__, NULL);
+            locateContentFail(__LINE__, "");
         }
     }
     char title[MAX_TITLE_BYTES + 1];
@@ -864,32 +874,32 @@ void handle_post(struct client_info* client) {
 
     pointer = strstr(quinter, "\r\n");
     if (pointer == 0) {
-        locateContentFail(__LINE__, NULL);
+        locateContentFail(__LINE__, "");
     }
     pointer += 2;
 
     // END TITLE ////////////////////////////
 
     if (strncmp(pointer, "Content-Disposition: form-data; name=\"composeText\"", 50) != 0) {
-        locateContentFail(__LINE__, NULL);
+        locateContentFail(__LINE__, "");
     }
     pointer += 50;
 
     if (strncmp(pointer, "\r\n", 2) != 0) {
-        locateContentFail(__LINE__, NULL);
+        locateContentFail(__LINE__, "");
     }
     pointer += 2;
 
     quinter = strstr(pointer, boundary);
     if (quinter - pointer <= 2 || quinter - pointer > MAX_COMPOSE_BYTES) {
-        locateContentFail(__LINE__, NULL);
+        locateContentFail(__LINE__, "");
     }
 
     // Should skip through whitespace
     while (*pointer == ' ' || *pointer == '\t' || *pointer == '\n' || *pointer == '\r') {
         pointer++;
         if (pointer >= end) {
-            locateContentFail(__LINE__, NULL);
+            locateContentFail(__LINE__, "");
         }
     }
     char textAreaBuffer[MAX_COMPOSE_BYTES + 1];

@@ -1,4 +1,6 @@
 
+ToLower() usernames and recipients when saving
+
 Fix form ui
 
 Clear text after sending message, popup if not sent.
@@ -11,10 +13,14 @@ Make emoji buttons nice
 
 Use some kinda of arena memory allocation instead of mallocing, so it's easier to debug, you can just read the memory like an array
 
-Checkbox link for upvotes: https://moderncss.dev/pure-css-custom-checkbox-style/
+Checkbox link for upvotes
+    https://moderncss.dev/pure-css-custom-checkbox-style/
 
 Client side input validation.
     https://www.theodinproject.com/lessons/node-path-intermediate-html-and-css-form-validation
+
+Compression
+    https://app.codecrafters.io/courses/http-server/overview
 
 Robots.txt?
 
