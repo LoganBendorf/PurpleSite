@@ -27,6 +27,7 @@ void send_301(struct client_info* client, struct client_info** clients_ptr) {
 #if PRINT_400 == false
 #define printf(...)
 #endif
+// Bad request
 void send_400(struct client_info* client, struct client_info** clients_ptr, char* string) {
     if (client == NULL) {
         return;}

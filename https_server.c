@@ -297,7 +297,7 @@ int main(int argc, char* argv[]) {
                             send_400(client, &clients, NULL);
                         } else {
                             *end_path = 0;
-                            serve_resource(client, &clients, path);
+                            serve_resource(client, &clients, users, path);
                             drop_client(client, &clients);
                         }
                     } else if (strncmp("POST /", client->request, 6) == 0) {

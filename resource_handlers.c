@@ -26,6 +26,7 @@ struct email {
 
 struct vote {
     char sender[MAX_NAME_BYTES + 1];
+    char title[MAX_TITLE_BYTES + 1];
     int hash;
 
     struct vote* next;
@@ -42,6 +43,14 @@ struct user {
 #define exit_print_line \
     printf("Line: %d\n", __LINE__); \
     exit(1)
+
+#define print_msg_send400_return(x) \
+        do { \
+            char* msg = x; \
+            printf("%s", msg); \
+            send_400(client, clients_ptr, msg); \
+            return; \
+        } while (0)
     
 static void user_data_search(char** pointer_ptr, char** quinter_ptr, char* search, char* buffer, int buffer_size) {
     *pointer_ptr = strstr(*pointer_ptr, search);          
@@ -58,6 +67,10 @@ static void user_data_search(char** pointer_ptr, char** quinter_ptr, char* searc
     memcpy(buffer, *pointer_ptr, *quinter_ptr - *pointer_ptr);
     *pointer_ptr = *quinter_ptr;
 }
+
+#if DEBUG_INIT_USERS != true
+#define printf(...) 
+#endif
 
 struct user* init_users() {
     printf("initializing users into data structure (linked list)\n");
@@ -133,11 +146,11 @@ struct user* init_users() {
             char sender_search[16] = {0};
             sprintf(sender_search, "%ssender: ", DELIMITER);
 
-            char hash_search[16] = {0};
-            sprintf(hash_search, "%shash: ", DELIMITER);
-
             char title_search[16] = {0};
             sprintf(title_search, "%stitle: ", DELIMITER);
+
+            char hash_search[16] = {0};
+            sprintf(hash_search, "%shash: ", DELIMITER);
 
             char body_search[16] = {0};
             sprintf(body_search, "%sbody: ", DELIMITER);
@@ -151,42 +164,42 @@ struct user* init_users() {
             // Data should already be clean
             int num_of_emails = 0;
             while (pointer < voted_start) {
-                //printf("\nemail\n");
+                printf("\nemail\n");
 
                 // Sender
                 char sender[MAX_NAME_BYTES + 1] = {0};
                 user_data_search(&pointer, &quinter, sender_search, sender, MAX_NAME_BYTES + 1);
-                //printf("sender = %s\n", sender);
-
-                // Hash
-                char hash_as_string[32] = {0};
-                user_data_search(&pointer, &quinter, hash_search, hash_as_string, 32);
-                //printf("hash_as_string = %s\n", hash_as_string);
-
-                // Will segfault if string is to big
-                int hash = atoi(hash_as_string);
+                printf("sender = %s\n", sender);
 
                 // Title
                 char title[MAX_TITLE_BYTES + 1] = {0};
                 user_data_search(&pointer, &quinter, title_search, title, MAX_TITLE_BYTES + 1);
-                //printf("title = %s\n", title);
+                printf("title = %s\n", title);
+
+                // Hash
+                char hash_as_string[32] = {0};
+                user_data_search(&pointer, &quinter, hash_search, hash_as_string, 32);
+                printf("hash_as_string = %s\n", hash_as_string);
+
+                // Will segfault if string is to big
+                int hash = atoi(hash_as_string);
 
                 // Body               
                 char body[MAX_COMPOSE_BYTES + 1] = {0};
                 user_data_search(&pointer, &quinter, body_search, body, MAX_COMPOSE_BYTES + 1); 
-                //printf("body = %s\n", body);
+                printf("body = %s\n", body);
 
                 // Upvotes
                 char upvotes_as_string[32] = {0};
                 user_data_search(&pointer, &quinter, upvotes_search, upvotes_as_string, 32);
-                //printf("upvotes_as_string = %s\n", upvotes_as_string);
+                printf("upvotes_as_string = %s\n", upvotes_as_string);
 
                 int upvotes = atoi(upvotes_as_string);
                 
                 // Date
                 char time_as_string[64] = {0};
                 user_data_search(&pointer, &quinter, time_search, time_as_string, 64);
-                //printf("time_as_string = %s\n", time_as_string);
+                printf("time_as_string = %s\n", time_as_string);
 
                 size_t time = atoi(time_as_string);
 
@@ -194,9 +207,9 @@ struct user* init_users() {
 
                 struct email* email = (struct email*) calloc(1, sizeof(struct email));
 
-                email->hash = hash;
                 strncpy(email->sender, sender, strlen(sender));
                 strncpy(email->title, title, strlen(title));
+                email->hash = hash;
                 strncpy(email->body, body, strlen(body));
                 email->upvotes = upvotes;
                 email->time_created = time;
@@ -221,20 +234,26 @@ struct user* init_users() {
         pointer = voted_start;
         // Has votes
         if (pointer + strlen(voted_start_search) != end) {
-            //printf("\nvote\n");
+            printf("\nvote\n");
 
             char sender_search[16] = {0};
             sprintf(sender_search, "%ssender: ", DELIMITER);
 
+            char title_search[16] = {0};
+            sprintf(title_search, "%stitle: ", DELIMITER);
+
             char hash_search[16] = {0};
             sprintf(hash_search, "%shash: ", DELIMITER);
-
 
             int num_of_votes = 0;
             while (pointer < end) {
                 // Sender
                 char sender[MAX_NAME_BYTES + 1] = {0};
                 user_data_search(&pointer, &quinter, sender_search, sender, MAX_NAME_BYTES + 1);
+
+                // Title
+                char title[MAX_TITLE_BYTES + 1] = {0};
+                user_data_search(&pointer, &quinter, title_search, title, MAX_TITLE_BYTES + 1);
 
                 // Hash
                 char hash_as_string[32] = {0};
@@ -247,8 +266,9 @@ struct user* init_users() {
 
                 struct vote* vote = (struct vote*) calloc(1, sizeof(struct vote));
 
-                vote->hash = hash;
                 strncpy(vote->sender, sender, strlen(sender));
+                strncpy(vote->title, title, strlen(title));
+                vote->hash = hash;
 
                 vote->next = votes;
                 votes = vote;
@@ -270,9 +290,12 @@ struct user* init_users() {
     }
     print_users(users);
 
-
     return users;
 }
+
+#if DEBUG_INIT_USERS != true
+#undef printf
+#endif
 
 
 void print_users(struct user* users) {
@@ -291,8 +314,8 @@ void print_user(struct user* user) {
     while (email_head) {
         printf("%d.\n", count++);
         printf("    Sender: %s\n", email_head->sender);
-        printf("    Hash:   %d\n", email_head->hash);
         printf("    Title:  %s\n", email_head->title);
+        printf("    Hash:   %d\n", email_head->hash);
         printf("    Body:   %s\n", email_head->body);
         printf("    Upvotes %d\n", email_head->upvotes);
         printf("    Time:   %ld\n", email_head->time_created);
@@ -304,7 +327,8 @@ void print_user(struct user* user) {
     while (vote_head) {
         printf("%d.\n", count++);
         printf("    Sender: %s\n", vote_head->sender);
-        printf("    Hash: %d\n", vote_head->hash);
+        printf("    Title:  %s\n", vote_head->title);
+        printf("    Hash:   %d\n", vote_head->hash);
         vote_head = vote_head->next;
     }
 }
@@ -343,28 +367,136 @@ const char* get_content_type(const char* path) {
 }
 
 
-void serve_resource(struct client_info* client, struct client_info** clients_ptr, const char* path) {
-
+void serve_resource(struct client_info* client, struct client_info** clients_ptr, struct user* users, char* path) {
     if (client == NULL) {
         fprintf(stderr, "serve_resource(). Called with NULL client\n");
-        return;
-    }
-
+        return;}
     printf("serve_resource() %s %s\n", get_client_address(&client), path);
-
+    
+    // Home page
     if (strcmp(path, "/") == 0) path = "/index.html";
 
+    // Hall of fame
     if (strcmp(path, "/hall_of_fame") == 0) {
         printf("Recursing chat\n");
-        serve_resource(client, clients_ptr, "/hall_of_fame/index.html");
-        serve_resource(client, clients_ptr, "/hall_of_fame/styles.css");
-        serve_resource(client, clients_ptr, "/hall_of_fame/favicon.ico");
+        serve_resource(client, clients_ptr, users, "/hall_of_fame/index.html");
+        serve_resource(client, clients_ptr, users, "/hall_of_fame/styles.css");
+        serve_resource(client, clients_ptr, users, "/hall_of_fame/favicon.ico");
         return;
     }
 
-    if (strlen(path) > 100) {
-        printf("Path > 100\n");
-        send_400(client, clients_ptr, NULL);
+    // User info
+    if (strncmp(path, "/users/", 7) == 0) {
+        printf("User emails requested\n");
+        char* pointer = path + 7;
+        char* quinter = strstr(pointer, "/");
+        if (quinter == 0) {
+            print_msg_send400_return("Malformed user info request\n");}
+
+        char username[MAX_NAME_BYTES + 1] = {0};
+        strncpy(username, pointer, quinter - pointer);
+
+        bool found = false;
+        struct user* user_head = users;
+        while (user_head) {
+            if (strcmp(user_head->username, username) == 0) {
+                found = true;
+                break;}
+            user_head = user_head->next;
+        }
+
+        if (!found) {
+            print_msg_send400_return("Requested user not found\n");}
+
+        pointer += strlen(username);
+        if (pointer > path + strlen(path)) {
+            print_msg_send400_return("Malformed user info request, no info after user name\n");}
+
+        quinter = strstr(pointer, "/emails");
+        if (quinter == 0) {
+            quinter = strstr(pointer, "/votes");
+            if (quinter == 0) {
+                print_msg_send400_return("Unknown request for user\n");}
+            // Find votes
+            struct vote* vote_head = user_head->votes;
+            while (vote_head) {
+                int bytes = 0;
+                char buffer[256] = {0};
+
+                strcat(buffer, DELIMITER);
+                bytes += strlen(DELIMITER);
+
+                strcat(buffer, vote_head->sender);
+                bytes += strlen(vote_head->sender);
+                strcat(buffer, DELIMITER);
+                bytes += strlen(DELIMITER);
+                
+                strcat(buffer, vote_head->title);
+                bytes += strlen(vote_head->title);
+                strcat(buffer, DELIMITER);
+                bytes += strlen(DELIMITER);
+                
+                char hash_as_string[32] = {0};
+                sprintf(hash_as_string, "%d", vote_head->hash);
+                strcat(buffer, hash_as_string);
+                bytes += strlen(hash_as_string);
+                strcat(buffer, DELIMITER);
+                bytes += strlen(DELIMITER);
+
+                SSL_write(client->ssl, buffer, bytes);
+                vote_head = vote_head->next;
+            }
+        } else {
+            // Find emails
+            struct email* email_head = user_head->emails;
+            while (email_head) {
+                int bytes = 0;
+                // Max email size is about 1500 I think
+                char buffer[2048] = {0};
+
+                strcat(buffer, DELIMITER);
+                bytes += strlen(DELIMITER);
+
+                strcat(buffer, email_head->sender);
+                bytes += strlen(email_head->sender);
+                strcat(buffer, DELIMITER);
+                bytes += strlen(DELIMITER);
+                
+                strcat(buffer, email_head->title);
+                bytes += strlen(email_head->title);
+                strcat(buffer, DELIMITER);
+                bytes += strlen(DELIMITER);
+                
+                char hash_as_string[32] = {0};
+                sprintf(hash_as_string, "%d", email_head->hash);
+                strcat(buffer, hash_as_string);
+                bytes += strlen(hash_as_string);
+                strcat(buffer, DELIMITER);
+                bytes += strlen(DELIMITER);
+
+                strcat(buffer, email_head->body);
+                bytes += strlen(email_head->body);
+                strcat(buffer, DELIMITER);
+                bytes += strlen(DELIMITER);
+
+                char upvotes_as_string[32] = {0};
+                sprintf(upvotes_as_string, "%d", email_head->upvotes);
+                strcat(buffer, upvotes_as_string);
+                bytes += strlen(upvotes_as_string);
+                strcat(buffer, DELIMITER);
+                bytes += strlen(DELIMITER);
+
+                char time_as_string[64] = {0};
+                sprintf(time_as_string, "%ld", email_head->time_created);
+                strcat(buffer, time_as_string);
+                bytes += strlen(time_as_string);
+                strcat(buffer, DELIMITER);
+                bytes += strlen(DELIMITER);
+
+                SSL_write(client->ssl, buffer, bytes);
+                email_head = email_head->next;
+            }
+        }
         return;
     }
 
@@ -530,14 +662,6 @@ void handle_put(struct client_info* client, struct client_info** clients_ptr) {
     char* end = client->received + client->request;
     char* pointer = client->request;
     char* quinter;
-
-    #define print_msg_send400_return(x) \
-        do { \
-            char* msg = x; \
-            printf("%s", msg); \
-            send_400(client, clients_ptr, msg); \
-            return; \
-        } while (0)
     
     char* headerType = "PUT / HTTP1.1\r\n";
     if (pointer + strlen(headerType) >= end || strncmp(pointer, headerType, strlen(headerType))) {
@@ -1218,8 +1342,8 @@ void handle_post(struct client_info* client, struct client_info** clients_ptr, s
         printf("Error: New email equaled null, out of memory?");
         return;}
     memcpy(new_email->sender, username, MAX_NAME_BYTES + 1);
-    new_email->hash = body_hash;
     memcpy(new_email->title, title, MAX_TITLE_BYTES + 1);
+    new_email->hash = body_hash;
     memcpy(new_email->body, body, MAX_COMPOSE_BYTES + 1);
     new_email->upvotes = 0;  
     time_t rawtime;

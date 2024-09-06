@@ -7,6 +7,7 @@
 #include <stdbool.h>
 
 // Toggles
+#define DEBUG_INIT_USERS true
 #define PRINT_CLIENTS_AFTER_FUNC    false
 #define PRINT_FUNC_START false
 #define PRINT_RECEIVED   true

@@ -40,7 +40,7 @@ function globalKeyDownListener(event) {
     if (event.key === 'Tab') {
         console.log("key equaled tab\n");
         currentUsername = document.querySelector('.usernameInput').value;
-        getFunction("/emails.txt");
+        getEmails();
     }
 }
 
@@ -193,7 +193,7 @@ function resizeInputUp(e) {
             if (e.target.classList[i] === 'usernameInput') {
                 console.log("class equaled usernameInput\n");
                 currentUsername = e.target.value;
-                getFunction("/emails.txt");
+                getEmails();
             }
         }
     }
@@ -254,173 +254,122 @@ function updateEmails(emails) {
 
     clearEmails();
 
-
-    let inputHash;
-    let inputSender;
-    let inputRecipient
-    let inputTitle;
-    let inputBody;
-    let inputUpvotes;
-    let end;
     console.log("current user = " + currentUsername);
     while (true) {
         console.log("ADDING EMAIL");
 
-        // RECIPIENT
-        let recipientIndex = emails.match(DELIMITER + "recipient: ");
-        if (recipientIndex === null) {
-            console.log("Done finding emails");
-            break;
-        }
-        recipientIndex = recipientIndex.index;
-        DEBUG_EMAILS&&console.log("recipientIndex =  " + recipientIndex);
-        recipientIndex += 11 + DELIMITER.length;
-        emails = emails.slice(recipientIndex, emails.length);
-        end = emails.match(DELIMITER);
-        if (end === null) {
-            console.log("failed to find recipient end (BAD)");
-            break;
-        }
-        end = end.index;
-        DEBUG_EMAILS&&console.log("endIndex =  " + end);
-        inputRecipient = emails.slice(0, end);
-        console.log("recipient: " + inputRecipient);
-        emails = emails.slice(end, emails.length);
-        if (inputRecipient != currentUsername) {
-            console.log("Email not for current username");
-            continue;
-        }
-
-        // HASH (dont need this right now, i guess)
-        let hashIndex = emails.match(DELIMITER + "hash: ");
-        if (hashIndex === null) {
-            console.log("failed to find hash (BAD)");
-            break;
-        }
-        hashIndex = hashIndex.index;
-        hashIndex += 6 + DELIMITER.length;
-        DEBUG_EMAILS&&console.log("hashIndex = " + hashIndex);
-        emails = emails.slice(hashIndex, emails.length);
-        end = emails.match(DELIMITER);
-        if (end === null) {
-            console.log("failed to find hash end (BAD");
-            break;
-        }
-        end = end.index;
-        inputHash = emails.slice(0, end);
-        console.log("hash: " + inputHash);
-        emails = emails.slice(end, emails.length);
-
-        // SENDER
-        let senderIndex = emails.match(DELIMITER + "sender: ");
+        // Sender 
+        let senderIndex = emails.match(DELIMITER);
         if (senderIndex === null) {
-            console.log("failed to find sender (BAD)");
-            break;
-        }
+            console.log("failed to find sender"); break;}
         senderIndex = senderIndex.index;
-        //console.log("senderIndex =  " + senderIndex);
-        senderIndex += 8 + DELIMITER.length;
+        senderIndex += DELIMITER.length;
         emails = emails.slice(senderIndex, emails.length);
-        end = emails.match(DELIMITER);
-        if (end === null) {
-            console.log("failed to find sender end (BAD)");
-            break;
-        }
-        end = end.index;
-        //console.log("endIndex =  " + end);
-        inputSender = emails.slice(0, end);
-        console.log("sender: " + inputSender);
-        emails = emails.slice(end, emails.length);
-        
 
-        // TITLE
-        let titleIndex = emails.match(DELIMITER + "title: ");
+        let endIndex = emails.match(DELIMITER);
+        if (endIndex === null) {
+            console.log("failed to find sender end"); break;}
+        endIndex = endIndex.index;
+        const senderStr = emails.slice(0, endIndex);
+        emails = emails.slice(endIndex, emails.length);
+
+        // Title
+        let titleIndex = emails.match(DELIMITER);
         if (titleIndex === null) {
-            console.log("failed to find title (BAD)");
-            break;
-        }
+            console.log("failed to find title"); break;}
         titleIndex = titleIndex.index;
-        //console.log("titleIndex =  " + titleIndex);
-        titleIndex += 7 + DELIMITER.length;
+        titleIndex += DELIMITER.length;
         emails = emails.slice(titleIndex, emails.length);
-        end = emails.match(DELIMITER);
-        if (end === null) {
-            console.log("failed to find title end (BAD)");
-            break;
-        }
-        end = end.index;
-        //console.log("endIndex =  " + end);
-        inputTitle = emails.slice(0, end);
-        console.log("title: " + inputTitle);
-        emails = emails.slice(end, emails.length);
 
-        console.log("emails after title:\n" + emails);
+        endIndex = emails.match(DELIMITER);
+        if (endIndex === null) {
+            console.log("failed to find title end"); break;}
+        endIndex = endIndex.index;
+        const titleStr = emails.slice(0, endIndex);
+        emails = emails.slice(endIndex, emails.length);
 
-        // BODY
-        let bodyIndex = emails.match(DELIMITER + "body: ");
+        // Hash
+        let hashIndex = emails.match(DELIMITER);
+        if (hashIndex === null) {
+            console.log("failed to find hash"); break;}
+        hashIndex = hashIndex.index;
+        hashIndex += DELIMITER.length;
+        emails = emails.slice(hashIndex, emails.length);
+
+        endIndex = emails.match(DELIMITER);
+        if (endIndex === null) {
+            console.log("failed to find hash end"); break;}
+        endIndex = endIndex.index;
+        const hashStr = emails.slice(0, endIndex);
+        emails = emails.slice(endIndex, emails.length);
+
+        // Body
+        let bodyIndex = emails.match(DELIMITER);
         if (bodyIndex === null) {
-            console.log("failed to find body (BAD)");
-            break;
-        }
+            console.log("failed to find body"); break;}
         bodyIndex = bodyIndex.index;
-        //console.log("bodyIndex =  " + bodyIndex);
-        bodyIndex += 6 + DELIMITER.length;
+        bodyIndex += DELIMITER.length;
         emails = emails.slice(bodyIndex, emails.length);
-        end = emails.match(DELIMITER);
-        if (end === null) {
-            console.log("failed to find body end (BAD)");
-            break;
-        }
-        end = end.index;
-        //console.log("endIndex =  " + end);
-        inputBody = emails.slice(0, end);
-        console.log("body: " + inputBody);
-        emails = emails.slice(end, emails.length);
 
-        console.log("emails after body:\n" + emails);
+        endIndex = emails.match(DELIMITER);
+        if (endIndex === null) {
+            console.log("failed to find body end"); break;}
+        endIndex = endIndex.index;
+        const bodyStr = emails.slice(0, endIndex);
+        emails = emails.slice(endIndex, emails.length);
 
-        // UPVOTES
-        let upvotesIndex = emails.match(DELIMITER + "upvotes: ");
+        // Upvotes
+        let upvotesIndex = emails.match(DELIMITER);
         if (upvotesIndex === null) {
-            console.log("failed to find upvotes (BAD)");
-            break;
-        }
+            console.log("failed to find upvotes"); break;}
         upvotesIndex = upvotesIndex.index;
-        //console.log("upvotesIndex =  " + upvotesIndex);
-        upvotesIndex += 9 + DELIMITER.length;
+        upvotesIndex += DELIMITER.length;
         emails = emails.slice(upvotesIndex, emails.length);
-        end = emails.match(DELIMITER);
-        if (end === null) {
-            console.log("failed to find upvotes end (BAD)");
-            break;
-        }
-        end = end.index;
-        //console.log("endIndex =  " + end);
-        inputUpvotes = emails.slice(0, end);
-        console.log("upvotes: " + inputUpvotes);
-        emails = emails.slice(end, emails.length);
 
+        endIndex = emails.match(DELIMITER);
+        if (endIndex === null) {
+            console.log("failed to find upvotes end"); break;}
+        endIndex = endIndex.index;
+        const upvotesStr = emails.slice(0, endIndex);
+        emails = emails.slice(endIndex, emails.length);
+
+        // Time created
+        let timeIndex = emails.match(DELIMITER);
+        if (timeIndex === null) {
+            console.log("failed to find time"); break;}
+        timeIndex = timeIndex.index;
+        timeIndex += DELIMITER.length;
+        emails = emails.slice(timeIndex, emails.length);
+
+        endIndex = emails.match(DELIMITER);
+        if (endIndex === null) {
+            console.log("failed to find time end"); break;}
+        endIndex = endIndex.index;
+        const timeStr = emails.slice(0, endIndex);
+        emails = emails.slice(endIndex, emails.length);
+
+        // Delimiter at the end of an email
+        emails.slice(DELIMITER.length, emails.length);
+
+        // Create elements
         let emailContainer = document.querySelector('.emailContainer');
         let email = document.createElement('div');
         email.classList.add('email', 'receivedEmail');
 
         let hash = document.createElement('div');
-        hash.textContent = "Hash: " + inputHash;
+        hash.textContent = "Hash: " + hashStr;
         hash.classList.add('emailHash', 'receivedEmail');
 
         let sender = document.createElement('div');
-        sender.textContent = "From: " + inputSender;
+        sender.textContent = "From: " + senderStr;
         sender.classList.add('emailSender', 'receivedEmail');
 
         let title = document.createElement('div');
-        title.textContent = inputTitle;
+        title.textContent = titleStr;
         title.classList.add('emailTitle', 'receivedEmail');
 
         let body = document.createElement('div');
-        if (inputBody.length > 30) {
-            inputBody = inputBody.slice(0, 30);
-        }
-        body.textContent = inputBody;
+        body.textContent = bodyStr.slice(0, 30);;
         body.classList.add('emailBody', 'receivedEmail');
 
         let upvoteContainer = document.createElement('div');
@@ -428,7 +377,7 @@ function updateEmails(emails) {
 
         let upvotes = document.createElement('div');
         upvotes.classList.add('emailUpvotes', 'receivedEmail');
-        upvotes.textContent = inputUpvotes;
+        upvotes.textContent = upvotesStr;
 
         let upvoteButton = document.createElement('button');
         upvoteButton.textContent = "^";
@@ -541,7 +490,7 @@ async function makePost() {
                 console.log(response);
                 emailSentPopUp(recipientString);
                 currentUsername = usernameString;
-                getFunction(response.headers.get('Location')); 
+                getEmails(); 
 
             } else {
                 console.log("unknown response status: " + response.status);
@@ -635,7 +584,7 @@ async function upvote(e) {
                 console.log(response);
                 // for now email pop up, should be upvoteSentPopUp or something idk
                 emailSentPopUp(recipientString);
-                //getFunction(response.headers.get('Location')); 
+                //getEmails(); 
 
             } else {
                 console.log("unknown response status: " + response.status);
@@ -652,13 +601,9 @@ async function unUpvote(e) {
     e.target.classList.add('unUpvoted');
 }
 
-function getFunction(thing_to_get) {
-    console.log("getFunction()");
-    if (thing_to_get === undefined) {
-        return;
-    }
-    let returnValue;
-    fetch("https://www.purplesite.skin" + thing_to_get, {
+async function getEmails() {
+    console.log("getEmails()");
+    fetch("https://www.purplesite.skin" + "/users/" + currentUsername + "/emails", {
             method: "GET",
         })
         .then(async response => {
