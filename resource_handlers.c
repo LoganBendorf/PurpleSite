@@ -5,6 +5,7 @@
 #include "connection_helpers.h"
 #include "send_status.h"
 #include "hash_functions.h"
+#include "resource_handlers.h"
 
 // Declared in https_server.c
 extern const char* DELIMITER;
@@ -58,12 +59,11 @@ static void user_data_search(char** pointer_ptr, char** quinter_ptr, char* searc
     *pointer_ptr = *quinter_ptr;
 }
 
-void init_users() {
+struct user* init_users() {
     printf("initializing users into data structure (linked list)\n");
 
-    FILE* fp = fopen("fake_emails.txt", "rba");
-    //FILE* fp = fopen("/public/emails.txt", "rba");
-
+    //FILE* fp = fopen("fake_emails.txt", "rba");
+    FILE* fp = fopen("public/emails.txt", "rba");
 
     if (fp == NULL) {
         exit_print_line;
@@ -268,34 +268,45 @@ void init_users() {
     if (users == NULL) {
         printf("found no users\n");
     }
+    print_users(users);
 
+
+    return users;
+}
+
+
+void print_users(struct user* users) {
     struct user* user_head = users;
     while (user_head) {
-        printf("Username: %s\n", user_head->username);
-        struct email* email_head = user_head->emails;
-        int count = 1;
-        printf("Emails:\n");
-        while (email_head) {
-            printf("%d.\n", count);
-            printf("    Sender: %s\n", email_head->sender);
-            printf("    Hash:   %d\n", email_head->hash);
-            printf("    Title:  %s\n", email_head->title);
-            printf("    Body:   %s\n", email_head->body);
-            printf("    Time:   %ld\n", email_head->time_created);
-            email_head = email_head->next;
-        }
-        struct vote* vote_head = user_head->votes;
-        count = 1;
-        printf("Votes:\n");
-        while (vote_head) {
-            printf("%d.\n", count);
-            printf("    Sender: %s\n", vote_head->sender);
-            printf("    Hash: %d\n", vote_head->hash);
-            vote_head = vote_head->next;
-        }
+        print_user(user_head);
         user_head = user_head->next;
     }
+}
 
+void print_user(struct user* user) {
+    printf("Username: %s\n", user->username);
+    struct email* email_head = user->emails;
+    int count = 1;
+    printf("Emails:\n");
+    while (email_head) {
+        printf("%d.\n", count++);
+        printf("    Sender: %s\n", email_head->sender);
+        printf("    Hash:   %d\n", email_head->hash);
+        printf("    Title:  %s\n", email_head->title);
+        printf("    Body:   %s\n", email_head->body);
+        printf("    Upvotes %d\n", email_head->upvotes);
+        printf("    Time:   %ld\n", email_head->time_created);
+        email_head = email_head->next;
+    }
+    struct vote* vote_head = user->votes;
+    count = 1;
+    printf("Votes:\n");
+    while (vote_head) {
+        printf("%d.\n", count++);
+        printf("    Sender: %s\n", vote_head->sender);
+        printf("    Hash: %d\n", vote_head->hash);
+        vote_head = vote_head->next;
+    }
 }
 
 #if PRINT_FILE_TYPE == true
@@ -550,8 +561,7 @@ void handle_put(struct client_info* client, struct client_info** clients_ptr) {
         print_msg_send400_return("Failed to find username end\n");
     }
 
-    // Removes whitespace from the middle so Mike and M ike are the same in the database,
-    //      should probably also tolower() it
+    // Removes whitespace from the middle so Mike and M ike are the same in the database
     char username[MAX_NAME_BYTES + 1] = {0};
     for (int i = 0; i < quinter - pointer; i++) {
         if (*pointer == ' ' || *pointer == '\t' || *pointer == '\n' || *pointer == '\r'){
@@ -693,7 +703,7 @@ void handle_put(struct client_info* client, struct client_info** clients_ptr) {
 #define printf(...) 
 #endif
 
-void handle_post(struct client_info* client, struct client_info** clients_ptr) {
+void handle_post(struct client_info* client, struct client_info** clients_ptr, struct user** users_ptr) {
     printf("handle_post()\n");
 
     char* end = client->received + client->request;
@@ -1130,9 +1140,9 @@ void handle_post(struct client_info* client, struct client_info** clients_ptr) {
             locateContentFail(__LINE__, "");
         }
     }
-    char textAreaBuffer[MAX_COMPOSE_BYTES + 1];
+    char body[MAX_COMPOSE_BYTES + 1];
     for (int i = 0; i < quinter - pointer; i++) {
-        textAreaBuffer[i] = pointer[i];
+        body[i] = pointer[i];
     }
     // Remove whitespace from end
     char* endOfTextArea = quinter - 1;
@@ -1152,131 +1162,103 @@ void handle_post(struct client_info* client, struct client_info** clients_ptr) {
         send_400(client, clients_ptr, "Empty text area");
         return;
     }
-    textAreaBuffer[quinter - pointer - whiteSpaceCount] = 0;
+    body[quinter - pointer - whiteSpaceCount] = 0;
 
-    if (strlen(textAreaBuffer) == 0) {
-        locateContentFail(__LINE__, "Empty text area");
-    }
+    if (strlen(body) == 0) {
+        locateContentFail(__LINE__, "Empty text area");}
 
-    kosher_chars = num_kosher_chars(textAreaBuffer, 1);
+    kosher_chars = num_kosher_chars(body, 1);
     if (kosher_chars <= 0) {
-        locateContentFail(__LINE__, "Text area is not kosher");
-    }
+        locateContentFail(__LINE__, "Text area is not kosher");}
+
     if (kosher_chars > MAX_COMPOSE_CHARACTERS) {
-        locateContentFail(__LINE__, "Text area contained too many characters");
-    }
+        locateContentFail(__LINE__, "Text area contained too many characters");}
 
-    if (contains_profanity(textAreaBuffer)) {
-        locateContentFail(__LINE__, "Text area has swears );");
-    }
+    if (contains_profanity(body)) {
+        locateContentFail(__LINE__, "Text area has swears );");}
 
-
-    int charCount = kosher_chars;
-    // END OF TRUNCATE
-    int text_area_hash = hash_function(textAreaBuffer);
-
-    FILE* file = fopen("public/emails.txt", "a");
-    if (file == NULL) {
-        fprintf(stderr, "public/emails.txt failed to open\n");
-        fprintf(stderr, "errno = %d\n", errno);
-        fprintf(stderr, "Error: %s\n", strerror(errno));
-        exit(1);
-    }
-
-    // UNTESTED WITH LARGE FILE SIZES
-    // right now i am assuming 32 bit hash
-    printf("\nchecking body hash\n");
-    char body_hash[64] = {0};
-    char hash_string[64] = {0};
-    sprintf(body_hash, "%d", text_area_hash);
-    strcat(hash_string, "\nhash: ");
-    strcat(hash_string, body_hash);
-    strcat(hash_string, "\n");
-
+    int body_characters = kosher_chars;
+    int body_hash = hash_function(body);
     // END OF TEXT AREA
 
     #undef locateContentFail
     //END OF LOCATE CONTENT
     printf("Content-Length = %d\n", contentLength);
     printf("Content-Type = %s\n", contentTypeBuffer);
+    pointer = username;
+    for (int i = 0; i < strlen(username); i++) {
+        // Skip tolower if unicode
+        if (username[i] >> 7 & 1 == 1) {
+            continue;
+        }
+        username[i] = tolower(username[i]);
+    }
     printf("username = %s\n", username);
+
+    pointer = recipient;
+    for (int i = 0; i < strlen(recipient); i++) {
+        // Skip tolower if unicode
+        if (recipient[i] >> 7 & 1 == 1) {
+            continue;
+        }
+        recipient[i] = tolower(recipient[i]);
+    }
     printf("recipient = %s\n", recipient);
     printf("title = %s\n", title);
-    printf("composeText = %s\n", textAreaBuffer);
-    printf("\nsize of textAreaBuffer = %ld\n", strlen(textAreaBuffer));
-    printf("char count = %d\n", charCount);
+    printf("body = %s\n", body);
+    printf("\nsize of body = %ld\n", strlen(body));
+    printf("body_characters = %d\n", body_characters);
     printf("\n");
-    printf("Text area hash = %d\n", text_area_hash);
+    printf("body hash = %d\n", body_hash);
     printf("End of content\n");
     
-    // Create email and append to user
-    /*
-    struct email new_email = {0};
-    new_email.hash = text_area_hash;
-    strcpy(new_email.sender, username);
-    strcpy(new_email.recipient, recipient);
-    strcpy(new_email.title, title);
-    strcpy(new_email.body, textAreaBuffer);
-    new_email.upvotes = 0;
+    // Create email 
+    struct email* new_email = (struct email*) calloc(1, sizeof(struct email));
+    if (new_email == NULL) {
+        printf("Error: New email equaled null, out of memory?");
+        return;}
+    memcpy(new_email->sender, username, MAX_NAME_BYTES + 1);
+    new_email->hash = body_hash;
+    memcpy(new_email->title, title, MAX_TITLE_BYTES + 1);
+    memcpy(new_email->body, body, MAX_COMPOSE_BYTES + 1);
+    new_email->upvotes = 0;  
     time_t rawtime;
     time(&rawtime);
     printf("time created = %ld\n", rawtime);
-    new_email.creationDate = rawtime;*/
-    time_t rawtime;
-
-    fwrite(DELIMITER, strlen(DELIMITER), 1, file);
-    fwrite("recipient: ", 11, 1, file);
-    fwrite(recipient, strlen(recipient), 1, file);
+    new_email->time_created = rawtime;
     
-    fwrite(DELIMITER, strlen(DELIMITER), 1, file);
-    fwrite("hash: ", 6, 1, file);
-    char hash_as_string[32 + 1];
-    int temp = text_area_hash;
-    int count = 0;
-    while (temp > 0) {
-        temp /= 10;
-        count++;
+    // Append email to user
+    bool in_struct = false;
+    struct user* user_head = *users_ptr;
+    while (user_head) {
+        printf("head = %s, ", user_head->username);
+        printf("recip = %s\n", recipient);
+        if (strcmp(user_head->username, recipient) == 0) {
+            printf("old user\n");
+            in_struct = true;
+            break;
+        }
+        user_head = user_head->next;
     }
-    sprintf(hash_as_string, "%d", text_area_hash);
-    fwrite(hash_as_string, count, 1, file);
 
-    fwrite(DELIMITER, strlen(DELIMITER), 1, file);
-    fwrite("sender: ", 8, 1, file);
-    fwrite(username, strlen(username), 1, file);
-    fwrite(DELIMITER, strlen(DELIMITER), 1, file);
-    fwrite("title: ", 7, 1, file);
-    fwrite(title, strlen(title), 1, file);
-    fwrite(DELIMITER, strlen(DELIMITER), 1, file);
-    fwrite("body: ", 6, 1, file);
-    fwrite(textAreaBuffer, strlen(textAreaBuffer), 1, file);
-    fwrite(DELIMITER, strlen(DELIMITER), 1, file);
-    fwrite("upvotes: 0", 10, 1, file);
-    fwrite(DELIMITER, strlen(DELIMITER), 1, file);
-    fwrite("time created: ", 14, 1, file);
-    char time_as_string[64 + 1] = {0};
-    long l_temp = rawtime;
-    count = 0;
-    while (l_temp > 0) {
-        l_temp /= 10;
-        count++;
+    if (!in_struct) {
+        printf("new user\n");
+        struct user* new_user = (struct user*) calloc(1, sizeof(struct user));
+        if (new_user == 0) {
+            printf("Error: new_user equaled null, out of memory");
+            return;}
+        memcpy(new_user->username, recipient, MAX_NAME_BYTES + 1);
+        new_user->next = *users_ptr;
+        *users_ptr = new_user;
+        user_head = new_user;
     }
-    sprintf(time_as_string, "%ld", rawtime);
-    fwrite(time_as_string, count, 1, file);
-    
-    fwrite(DELIMITER, strlen(DELIMITER), 1, file);
-    fwrite(DELIMITER, strlen(DELIMITER), 1, file);
 
-    fclose(file);
+    new_email->next = user_head->emails;
+    user_head->emails = new_email;
 
+    print_users(*users_ptr);
 
-    char buffer[BSIZE] = {0};
-    //sprintf(buffer, "HTTP/1.1 200 OK\r\n");
-    // Compressed multiple writes into one
-    sprintf(buffer, "HTTP/1.1 201 Created\r\n");
-    strcat(buffer, "Access-Control-Expose-Headers: Location\r\n");
-    strcat(buffer, "Location: /emails.txt\r\n");    
-    strcat(buffer, "\r\n");
-    SSL_write(client->ssl, buffer, strlen(buffer));
+    send_200(client, clients_ptr);
 
     drop_client(client, clients_ptr);
 }

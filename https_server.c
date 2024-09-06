@@ -37,8 +37,10 @@
 #include "hash_functions.h"
 #include "resource_handlers.h"
 
-// Clients are calloced
-static struct client_info* clients = 0;
+// Clients are calloced, dont think static does anything
+static struct client_info* clients = NULL;
+
+struct user* users = NULL;
 
 // Things might break if delimiter size is increased
 const char* DELIMITER = "\'\'\n";
@@ -130,6 +132,8 @@ int main(int argc, char* argv[]) {
         fprintf(stderr, "managed to regain root privileges\n");
         exit(1);
     }
+
+    users = init_users();
 
     #if PRINT_CLIENTS_AFTER_FUNC == true
     printf("Before main clients = %p\n", clients);
@@ -297,7 +301,7 @@ int main(int argc, char* argv[]) {
                             drop_client(client, &clients);
                         }
                     } else if (strncmp("POST /", client->request, 6) == 0) {
-                        handle_post(client, &clients);
+                        handle_post(client, &clients, &users);
                     } else {
                         send_400(client, &clients, NULL);
                     }
