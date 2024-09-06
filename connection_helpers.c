@@ -57,12 +57,12 @@ int create_socket(const char* host, const char* port) {
     return socket_listen;
 }
 
-struct client_info* get_client(int socket, struct client_info** clientsPtr) {
+struct client_info* get_client(int socket, struct client_info** clients_ptr) {
     #if PRINT_FUNC_START == true
     printf("Getting client\n");
     #endif
 
-    struct client_info* clients = *clientsPtr;
+    struct client_info* clients = *clients_ptr;
 
     // reduntant? why not just change ci to clients?
     struct client_info* ci = clients;
@@ -83,21 +83,21 @@ struct client_info* get_client(int socket, struct client_info** clientsPtr) {
     new->address_length = sizeof(new->address);
     new->next = clients;
     clients = new;
-    *clientsPtr = clients;
+    *clients_ptr = clients;
     new->parseFailures = 0;
     printf("New client = %p\n", new);
     return new;
 }
 
-void drop_client(struct client_info* client, struct client_info** clientsPtr) {
+void drop_client(struct client_info* client, struct client_info** clients_ptr) {
     #if PRINT_FUNC_START == true
     printf("Dropping client\n");
     #endif
 
-    if (clientsPtr == NULL) {
+    if (clients_ptr == NULL) {
         return;
     }
-    struct client_info** pointer = clientsPtr;
+    struct client_info** pointer = clients_ptr;
 
     while (*pointer) {
         if (*pointer == client) {
@@ -115,11 +115,11 @@ void drop_client(struct client_info* client, struct client_info** clientsPtr) {
     fprintf(stderr, "drop_client(). Client not found.\n");
 }
 
-const char* get_client_address(struct client_info** clientPtr) {
+const char* get_client_address(struct client_info** client_ptr) {
 
     // static might create problems with multuihreading
     static char address_buffer[100];
-    struct client_info* client = *clientPtr;
+    struct client_info* client = *client_ptr;
     getnameinfo((struct sockaddr*) &client->address,
             client->address_length,
             address_buffer, sizeof(address_buffer), 0, 0,
@@ -127,7 +127,7 @@ const char* get_client_address(struct client_info** clientPtr) {
     return address_buffer;
 }
 
-fd_set wait_on_clients(int server, struct client_info** clientsPtr) {
+fd_set wait_on_clients(int server, struct client_info** clients_ptr) {
     #if PRINT_FUNC_START == true
     printf("Waiting\n");
     #endif
@@ -137,7 +137,7 @@ fd_set wait_on_clients(int server, struct client_info** clientsPtr) {
     FD_SET(server, &reads);
     int max_socket = server;
 
-    struct client_info* clients = *clientsPtr;
+    struct client_info* clients = *clients_ptr;
 
     struct client_info* client = clients;
 
@@ -151,12 +151,12 @@ fd_set wait_on_clients(int server, struct client_info** clientsPtr) {
         // Error handling
         if (client == client->next) {
             fprintf(stderr, "wait_on_clients(). Client equaled itself\n");
-            drop_client(client, clientsPtr);
+            drop_client(client, clients_ptr);
             break;
         }
         if (MAX_CLIENTS-- <= 0) {
             fprintf(stderr, "wait_on_clients(). Too many clients or loop\n");
-            drop_client(client, clientsPtr);
+            drop_client(client, clients_ptr);
             break;
         }
 

@@ -255,6 +255,7 @@ function updateEmails(emails) {
     clearEmails();
 
 
+    let inputHash;
     let inputSender;
     let inputRecipient
     let inputTitle;
@@ -297,7 +298,18 @@ function updateEmails(emails) {
             break;
         }
         hashIndex = hashIndex.index;
-        //console.log("hashIndex = " + hashIndex);
+        hashIndex += 6 + DELIMITER.length;
+        DEBUG_EMAILS&&console.log("hashIndex = " + hashIndex);
+        emails = emails.slice(hashIndex, emails.length);
+        end = emails.match(DELIMITER);
+        if (end === null) {
+            console.log("failed to find hash end (BAD");
+            break;
+        }
+        end = end.index;
+        inputHash = emails.slice(0, end);
+        console.log("hash: " + inputHash);
+        emails = emails.slice(end, emails.length);
 
         // SENDER
         let senderIndex = emails.match(DELIMITER + "sender: ");
@@ -392,6 +404,10 @@ function updateEmails(emails) {
         let email = document.createElement('div');
         email.classList.add('email', 'receivedEmail');
 
+        let hash = document.createElement('div');
+        hash.textContent = "Hash: " + inputHash;
+        hash.classList.add('emailHash', 'receivedEmail');
+
         let sender = document.createElement('div');
         sender.textContent = "From: " + inputSender;
         sender.classList.add('emailSender', 'receivedEmail');
@@ -416,9 +432,11 @@ function updateEmails(emails) {
 
         let upvoteButton = document.createElement('button');
         upvoteButton.textContent = "^";
-        upvoteButton.classList.add('emailUpvoteButton', 'receivedEmail');
+        upvoteButton.classList.add('emailUpvoteButton', 'receivedEmail', 'unUpvoted');
+        upvoteButton.addEventListener("click", upvoteClick);
 
-        email.append(sender);
+        email.appendChild(hash);
+        email.appendChild(sender);
         email.appendChild(title);
         email.appendChild(body);
         upvoteContainer.appendChild(upvotes);
@@ -445,6 +463,7 @@ async function emailSentPopUp(recipientString) {
 async function makePost() {
     console.log("makePost");
     
+    // Should just use currentUsername
     const usernameInput = document.querySelector('.usernameInput');
     let usernameString = "";
     if (usernameInput.value !== null) {
@@ -505,20 +524,17 @@ async function makePost() {
                 if (response.status === 400) {
                     console.log(response.statusText);
                     if (response.statusText == "Empty username") {
-                        emptyUsername();
-                    }
-                    if (response.statusText == "Empty recipient") {
-                        emptyUsername();
-                    }
-                    if (response.statusText == "Empty title") {
-                        emptyUsername();
-                    }
-                    if (response.statusText == "Empty text area") {
-                        emptyUsername();
-                    }
+                        emptyUsername(); }
+                    else if (response.statusText == "Empty recipient") {
+                        emptyUsername(); }
+                    else if (response.statusText == "Empty title") {
+                        emptyUsername(); }
+                    else if (response.statusText == "Empty text area") {
+                        emptyUsername(); }
+                    else {
+                        console.log("Unknown 400 error"); }
                 } else {
-                    console.log("unknown error response: " + response.status);
-                }
+                    console.log("unknown error response: " + response.status); }
             }
             if (response.status === 201) {
                 console.log("email successfully sent");
@@ -533,6 +549,107 @@ async function makePost() {
         })} catch (error) {
             console.log(error);
     };
+}
+
+function upvoteClick(e) {
+    console.log("upvoteClick");
+
+    const classes = e.target.className.split(' ');
+    for (let i = 0; i < classes.length; i++) {
+        if (classes[i] === 'upvoted') {
+            unUpvote(e);
+            return;
+        }
+        if (classes[i] === 'unUpvoted') {
+            upvote(e);
+            return
+        }
+    }
+    console.log("Error: Still in upvoteClick function. Button must have had wrong classes assigned\n");
+}
+
+async function upvote(e) {
+    console.log("upvote");
+
+    e.target.classList.remove('unUpvoted');
+    e.target.classList.add('upvoted');
+
+    
+    const upvoteContainer = e.target.parentNode;
+    const email = upvoteContainer.parentNode;
+    const emailChildren = email.childNodes;
+
+    // username is global
+    let hash = "";
+    let sender = "";
+    
+    for (let i = 0; i < emailChildren.length; i++) {
+        const classes = emailChildren[i].className.split(' ');
+        for (let j = 0; j < classes.length; j++) {
+            if (classes[j] == "emailHash") {
+                let hashWithPrefix = emailChildren[i].textContent;
+                hash = hashWithPrefix.slice(6, hashWithPrefix.length);
+            }
+            if (classes[j] == "emailSender") {
+                let senderWithPrefix = emailChildren[i].textContent;
+                sender = senderWithPrefix.slice(6, senderWithPrefix.length);
+            }
+        }
+    }
+
+    if (hash = "") {;
+        console.log("Error: hash is empty");
+        return;
+    }
+    if (sender == "") {
+        console.log("Error: sender is empty");
+        return;
+    }
+    // Testing serverside first
+    //if (currentUsername == "") {
+    //   console.log("Error: username is empty");
+    //    return;
+    //}
+    
+    putData = new FormData();
+
+    putData.append('username', currentUsername);
+    putData.append('sender', sender);
+    putData.append('hash', hash);
+
+    try {
+        fetch("https://www.purplesite.skin", {
+            method: "PUT",
+            body: putData,
+        })
+        .then(response => {
+            if (!response.ok) {
+                if (response.status === 400) {
+                    console.log(response.statusText);
+                    console.log("Unknown 400 error. Text = " + response.statusText);
+                } else {
+                    console.log("unknown error response: " + response.status); }
+            }
+            if (response.status === 201) {
+                console.log("upvote successfully sent");
+                console.log(response);
+                // for now email pop up, should be upvoteSentPopUp or something idk
+                emailSentPopUp(recipientString);
+                //getFunction(response.headers.get('Location')); 
+
+            } else {
+                console.log("unknown response status: " + response.status);
+            }
+        })} catch (error) {
+            console.log(error);
+    };
+}
+
+async function unUpvote(e) {
+    console.log("unUpvote");
+
+    e.target.classList.remove('upvoted');
+    e.target.classList.add('unUpvoted');
 }
 
 function getFunction(thing_to_get) {

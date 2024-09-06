@@ -1,2 +1,2 @@
-main: makefile https_server.c structs_and_macros.h hash_functions.c send_status.c connection_helpers.c
-	gcc -o https_server https_server.c hash_functions.c send_status.c connection_helpers.c -lcrypto -lssl -g
+main: makefile https_server.c structs_and_macros.h hash_functions.c send_status.c connection_helpers.c resource_handlers.c resource_handlers.c
+	gcc -o https_server https_server.c hash_functions.c send_status.c connection_helpers.c resource_handlers.c -lcrypto -lssl -g

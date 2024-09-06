@@ -6,6 +6,14 @@
 #include <ctype.h>
 
 
+// Declared in https_server.c
+extern int min_size_profanity;
+extern int max_size_profanity;
+
+extern char* profanity_list[128];
+extern int profanity_hash_list[128];
+
+
 #if PRINT_HASH == false
 #define printf(...) 
 #endif
@@ -67,7 +75,7 @@ int hash_function(char* string) {
 #define printf
 #endif
 // profanity is seperated by newline, if not it will break
-void hash_profanity_list(int profanity_hash_list[], char* profanity_list[], int* max_size_profanity, int* min_size_profanity) {
+void hash_profanity_list() {
     printf("\nPRINTING PROFANITY\n");
     FILE* file = fopen("profanity.txt", "r");
     int i = 0;
@@ -83,14 +91,14 @@ void hash_profanity_list(int profanity_hash_list[], char* profanity_list[], int*
         int size = strlen(line) - 1;
         profanity_list[i][size] = 0;
         printf("size = %d\n", size);
-        //printf("max_size_profanity = %d\n", *max_size_profanity);
+        //printf("max_size_profanity = %d\n", max_size_profanity);
 
-        if (size < *min_size_profanity) {
-            *min_size_profanity = size;
+        if (size < min_size_profanity) {
+            min_size_profanity = size;
             printf("min_size_profanity changed to %d\n", size);
         }
-        if (size > *max_size_profanity) {
-            *max_size_profanity = size;
+        if (size > max_size_profanity) {
+            max_size_profanity = size;
             printf("max_size_profanity changed to %d\n", size);
         }
         printf("added %s to profanity list\n", profanity_list[i]);
@@ -109,7 +117,7 @@ void hash_profanity_list(int profanity_hash_list[], char* profanity_list[], int*
 
 // should only give string with length less than 1024, last byte is for 0
 // ONCE FOUND HASHES THAT MATCH CHECK TO MAKE SURE IT ACTUALLY IS PROFANITY
-bool contains_profanity(char* string, int profanity_hash_list[], char* profanity_list[], int max_size_profanity, int min_size_profanity) {
+bool contains_profanity(char* string) {
     printf("contain_profanity() called with string (%s)\n", string);
     char bad_msg_buffer[1024] = {0};
     strcpy(bad_msg_buffer, string);

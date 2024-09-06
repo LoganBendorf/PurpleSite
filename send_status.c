@@ -2,21 +2,21 @@
 #include "send_status.h"
 #include "connection_helpers.h"
 
-void send_301(struct client_info* client, struct client_info** clientsPtr) {
+void send_301(struct client_info* client, struct client_info** clients_ptr) {
     if (client == NULL) {
         return;}
     const char* c301 = "HTTP/1.1 301 Moved Permanently\r\n"
             "Location: https://www.purplesite.skin\r\n\r\n";
     printf("Sent default 301:\n%s\n", c301);
     send(client->socket, c301, strlen(c301), 0);
-    drop_client(client, clientsPtr);
+    drop_client(client, clients_ptr);
     return;
 }
 
 #if PRINT_400 == false
 #define printf(...)
 #endif
-void send_400(struct client_info* client, struct client_info** clientsPtr, char* string) {
+void send_400(struct client_info* client, struct client_info** clients_ptr, char* string) {
     if (client == NULL) {
         return;}
     if (string == NULL || strlen(string) == 0) {
@@ -25,7 +25,7 @@ void send_400(struct client_info* client, struct client_info** clientsPtr, char*
             "Content-Length: 11\r\n\r\nBad Request";
         printf("Sent default 400:\n%s\n", c400);
         SSL_write(client->ssl, c400, strlen(c400));
-        drop_client(client, clientsPtr);
+        drop_client(client, clients_ptr);
         return;
     }
     const char* beginningString = "HTTP/1.1 400 ";
@@ -49,19 +49,19 @@ void send_400(struct client_info* client, struct client_info** clientsPtr, char*
     strcpy(pointer, endingString);
 
     SSL_write(client->ssl, c400, 256);
-    drop_client(client, clientsPtr);
+    drop_client(client, clients_ptr);
     printf("Sent custom 400:\n%s\n", c400);
 }
 #if PRINT_400 == false
 #undef printf
 #endif
 
-void send_404(struct client_info* client, struct client_info** clientsPtr) {
+void send_404(struct client_info* client, struct client_info** clients_ptr) {
     if (client == NULL) {
         return;}
     const char* c404 = "HTTP/1.1 404 Not Found\r\n"
         "Connection: close\r\n"
         "content-Length: 9\r\n\r\nNot Found";
     SSL_write(client->ssl, c404, strlen(c404));
-    drop_client(client, clientsPtr);
+    drop_client(client, clients_ptr);
 }

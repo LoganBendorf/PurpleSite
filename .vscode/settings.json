@@ -6,6 +6,17 @@
         "send_status.h": "c",
         "ssl.h": "c",
         "types.h": "c",
-        "unistd.h": "c"
+        "unistd.h": "c",
+        "string": "c",
+        "vector": "c",
+        "memory": "c",
+        "optional": "c",
+        "string_view": "c",
+        "system_error": "c",
+        "algorithm": "c",
+        "array": "c",
+        "deque": "c",
+        "unordered_map": "c",
+        "iterator": "c"
     }
 }

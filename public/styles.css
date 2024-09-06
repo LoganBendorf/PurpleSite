@@ -146,6 +146,12 @@ body {
 .emailUpvoteButton {
     flex-basis: 1em;
 }
+.unUpvoted {
+    border: solid red;
+}
+.upvoted {
+    border: solid blue;
+}
 .composeContainer {
     border: solid white;
     border-width: 6px;
