@@ -255,7 +255,7 @@ function updateEmails(emails) {
     clearEmails();
 
     console.log("current user = " + currentUsername);
-    while (true) {
+    while (emails.length > 0) {
         console.log("ADDING EMAIL");
 
         // Sender 
@@ -272,6 +272,7 @@ function updateEmails(emails) {
         endIndex = endIndex.index;
         const senderStr = emails.slice(0, endIndex);
         emails = emails.slice(endIndex, emails.length);
+        console.log("sender = " +  senderStr);
 
         // Title
         let titleIndex = emails.match(DELIMITER);
@@ -287,6 +288,7 @@ function updateEmails(emails) {
         endIndex = endIndex.index;
         const titleStr = emails.slice(0, endIndex);
         emails = emails.slice(endIndex, emails.length);
+        console.log("title = " +  titleStr);
 
         // Hash
         let hashIndex = emails.match(DELIMITER);
@@ -302,6 +304,7 @@ function updateEmails(emails) {
         endIndex = endIndex.index;
         const hashStr = emails.slice(0, endIndex);
         emails = emails.slice(endIndex, emails.length);
+        console.log("hash = " +  hashStr);
 
         // Body
         let bodyIndex = emails.match(DELIMITER);
@@ -317,6 +320,7 @@ function updateEmails(emails) {
         endIndex = endIndex.index;
         const bodyStr = emails.slice(0, endIndex);
         emails = emails.slice(endIndex, emails.length);
+        console.log("body = " +  bodyStr);
 
         // Upvotes
         let upvotesIndex = emails.match(DELIMITER);
@@ -332,6 +336,7 @@ function updateEmails(emails) {
         endIndex = endIndex.index;
         const upvotesStr = emails.slice(0, endIndex);
         emails = emails.slice(endIndex, emails.length);
+        console.log("upvotes = " +  upvotesStr);
 
         // Time created
         let timeIndex = emails.match(DELIMITER);
@@ -347,9 +352,13 @@ function updateEmails(emails) {
         endIndex = endIndex.index;
         const timeStr = emails.slice(0, endIndex);
         emails = emails.slice(endIndex, emails.length);
+        console.log("time = " +  timeStr);
 
+        
+        console.log("2");
         // Delimiter at the end of an email
-        emails.slice(DELIMITER.length, emails.length);
+        emails = emails.slice(DELIMITER.length, emails.length);
+        console.log("emails after search = " + emails);
 
         // Create elements
         let emailContainer = document.querySelector('.emailContainer');
@@ -529,31 +538,36 @@ async function upvote(e) {
     const emailChildren = email.childNodes;
 
     // username is global
-    let hash = "";
     let sender = "";
+    let title = "";
+    let hash = "";
     
     for (let i = 0; i < emailChildren.length; i++) {
         const classes = emailChildren[i].className.split(' ');
         for (let j = 0; j < classes.length; j++) {
-            if (classes[j] == "emailHash") {
-                let hashWithPrefix = emailChildren[i].textContent;
-                hash = hashWithPrefix.slice(6, hashWithPrefix.length);
-            }
             if (classes[j] == "emailSender") {
                 let senderWithPrefix = emailChildren[i].textContent;
                 sender = senderWithPrefix.slice(6, senderWithPrefix.length);
             }
+            if (classes[j] == "emailTitle") {
+                title = emailChildren[i].textContent;
+            }
+            if (classes[j] == "emailHash") {
+                let hashWithPrefix = emailChildren[i].textContent;
+                hash = hashWithPrefix.slice(6, hashWithPrefix.length);
+            }
         }
     }
 
-    if (hash = "") {;
-        console.log("Error: hash is empty");
-        return;
-    }
     if (sender == "") {
         console.log("Error: sender is empty");
-        return;
-    }
+        return;}
+    if (title == "") {
+        console.log("Error: title is empty");
+        return;}
+    if (hash == "") {;
+        console.log("Error: hash is empty");
+        return;}
     // Testing serverside first
     //if (currentUsername == "") {
     //   console.log("Error: username is empty");
@@ -562,9 +576,13 @@ async function upvote(e) {
     
     putData = new FormData();
 
+    putData.append('vote_type', "upvote");
     putData.append('username', currentUsername);
     putData.append('sender', sender);
+    putData.append('title', title);
     putData.append('hash', hash);
+
+    console.log("put, sending: vote_type: upvote username: " + currentUsername + " sender: " + sender + " tite: " + title + " hash: " + hash)
 
     try {
         fetch("https://www.purplesite.skin", {

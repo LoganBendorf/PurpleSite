@@ -17,6 +17,9 @@
         "array": "c",
         "deque": "c",
         "unordered_map": "c",
-        "iterator": "c"
+        "iterator": "c",
+        "*.tcc": "c",
+        "typeinfo": "c",
+        "compare": "c"
     }
 }

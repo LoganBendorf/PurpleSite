@@ -1,6 +1,13 @@
 
 #include <errno.h>
 #include <ctype.h>
+#include <unistd.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h> 
+
+#include <dirent.h>   // For directory operations
+#include <sys/stat.h> // For struct stat
 
 #include "connection_helpers.h"
 #include "send_status.h"
@@ -13,32 +20,7 @@ extern char* profanity_list[128];
 extern int profanity_hash_list[128];
 
 
-struct email {
-    char sender[MAX_NAME_BYTES + 1];
-    int hash;
-    char title[MAX_TITLE_BYTES + 1];
-    char body[MAX_COMPOSE_BYTES + 1];
-    int upvotes;
-    time_t time_created;
-
-    struct email* next;
-};
-
-struct vote {
-    char sender[MAX_NAME_BYTES + 1];
-    char title[MAX_TITLE_BYTES + 1];
-    int hash;
-
-    struct vote* next;
-};
-
-struct user {
-    char username[MAX_NAME_BYTES + 1];
-    struct email* emails;
-    struct vote* votes;
-
-    struct user* next;
-};
+#define ERR_MSG_BUF_LEN 128
 
 #define exit_print_line \
     printf("Line: %d\n", __LINE__); \
@@ -46,7 +28,8 @@ struct user {
 
 #define print_msg_send400_return(x) \
         do { \
-            char* msg = x; \
+            char msg[256] = {0}; \
+            strncpy(msg, x, 256); \
             printf("%s", msg); \
             send_400(client, clients_ptr, msg); \
             return; \
@@ -73,216 +56,263 @@ static void user_data_search(char** pointer_ptr, char** quinter_ptr, char* searc
 #endif
 
 struct user* init_users() {
-    printf("initializing users into data structure (linked list)\n");
+    printf("\ninitializing users into data structure (linked list)\n");
 
-    //FILE* fp = fopen("fake_emails.txt", "rba");
-    FILE* fp = fopen("public/emails.txt", "rba");
+    char sender_search[16] = {0};
+    sprintf(sender_search, "sender: ");
 
-    if (fp == NULL) {
-        exit_print_line;
-    }
-    
-    fseek(fp, 0L, SEEK_END);
-    size_t emails_length = ftell(fp);
-    rewind(fp);
+    char title_search[16] = {0};
+    sprintf(title_search, "title: ");
 
-    if (emails_length <= 0) {
-        exit_print_line; }
+    char hash_search[16] = {0};
+    sprintf(hash_search, "hash: ");
 
-    if (emails_length > 5001001) {
-        exit_print_line; }
+    char body_search[16] = {0};
+    sprintf(body_search, "body: ");
 
-    // Malloc should be fine i think
-    char* buffer = (char*) malloc(emails_length);
-    if (buffer == NULL) {
-        exit_print_line; }
+    char upvotes_search[16] = {0};
+    sprintf(upvotes_search, "upvotes: ");
 
-    int read = fread(buffer, 1, emails_length, fp);
-    if (read != emails_length) {
-        exit_print_line; }
+    char time_search[32] = {0};
+    sprintf(time_search, "time_created: ");
 
-    char* pointer = buffer;
-    char* quinter;
+    const char *users_path = "./public/users";
+    struct dirent *users_dir;
+    struct stat file_stat;
+    DIR *dir = opendir(users_path);
+    if (dir == NULL) {
+        perror("Unable to open users directory"); exit(1);}
 
-    struct user* users = NULL;
+    struct user* users = {0};
 
-    if (pointer >= emails_length + buffer) {
-        exit_print_line;}
-    while (pointer < emails_length + buffer) {
+    // like 10 MB
+    #define MAX_FILE_SIZE 1024 * 1000 * 10
+    char* file_buffer = (char*) calloc(1, MAX_FILE_SIZE);
+    // Iterate through users
+    while ((users_dir = readdir(dir)) != NULL) {
+        // Skip the special entries "." and ".."
+        if (strcmp(users_dir->d_name, ".") == 0 || strcmp(users_dir->d_name, "..") == 0) {
+            continue;}
+
+        char user_path[512];
+        snprintf(user_path, 512, "%s/%s", users_path, users_dir->d_name);
+
+        if (stat(users_path, &file_stat) == 0) {
+            if (S_ISDIR(file_stat.st_mode)) {
+                printf("Directory: %s\n", users_dir->d_name);}
+        } else {
+            perror("Unable to get file status"); exit(1);}
+
+
+        struct dirent *user_dir;
+        DIR *dir2 = opendir(user_path);
+        if (dir2 == NULL) {
+            perror("Unable to open users directory"); exit(1);}
+
         struct user* user = (struct user*) calloc(1, sizeof(struct user));
+        struct email* emails = {0};
+        struct vote* votes = {0};
 
-        char username_start[16] = {0};
-        sprintf(username_start, "%susername: ", DELIMITER);
-        pointer = strstr(pointer, username_start);
-        if (pointer == 0) {
-            break;}
-        pointer += strlen(username_start);
+        // Emails and votes
+        while ((user_dir = readdir(dir2)) != NULL) {
+            // Skip the special entries "." and ".."
+            if (strcmp(user_dir->d_name, ".") == 0 || strcmp(user_dir->d_name, "..") == 0) {
+                continue;}
 
-        quinter = strstr(pointer, DELIMITER);
-        if (quinter == 0) {
-            break;}
-        strncpy(user->username, pointer, quinter - pointer);
+            char component_path[1024];
+            snprintf(component_path, 1024, "%s/%s", user_path, user_dir->d_name);
 
-        char emails_start_search[16] = {0};
-        sprintf(emails_start_search, "%semails:", DELIMITER);
+            if (stat(users_path, &file_stat) == 0) {
+                if (!S_ISDIR(file_stat.st_mode)) {
+                    printf("File: %s\n", user_dir->d_name);}
+            } else {
+                perror("Unable to get file status"); exit(1);}
 
-        char* emails_start = strstr(pointer, emails_start_search);
-        if (emails_start == 0) {
-            exit_print_line; }
+            char* pointer;
+            char* quinter;
+            char* end;
+            if (strcmp(user_dir->d_name, "emails") == 0) {
+                FILE* fp = fopen(component_path, "r");
+                if (fp == NULL) {
+                    printf("couldn't open user emails file\n"); exit(1);}
 
-        char voted_start_search[16] = {0};
-        sprintf(voted_start_search, "%svoted:", DELIMITER);
+                int bytes_read = fread(file_buffer, 1, MAX_FILE_SIZE, fp);
+                if (bytes_read >= MAX_FILE_SIZE) {
+                    printf("bruh, file it way too big\n"); exit(1);}
 
-        char* voted_start = strstr(emails_start, voted_start_search);
-        if (voted_start == 0) {
-            exit_print_line; }
+                printf("\nFILE:\n%s\n", file_buffer);
 
-        struct email* emails = NULL;
-
-        pointer = emails_start + strlen(emails_start_search);
-        // Has emails
-        if (pointer != voted_start) {
-
-            char sender_search[16] = {0};
-            sprintf(sender_search, "%ssender: ", DELIMITER);
-
-            char title_search[16] = {0};
-            sprintf(title_search, "%stitle: ", DELIMITER);
-
-            char hash_search[16] = {0};
-            sprintf(hash_search, "%shash: ", DELIMITER);
-
-            char body_search[16] = {0};
-            sprintf(body_search, "%sbody: ", DELIMITER);
-
-            char upvotes_search[16] = {0};
-            sprintf(upvotes_search, "%supvotes: ", DELIMITER);
-
-            char time_search[32] = {0};
-            sprintf(time_search, "%stime created: ", DELIMITER);
-
-            // Data should already be clean
-            int num_of_emails = 0;
-            while (pointer < voted_start) {
-                printf("\nemail\n");
-
-                // Sender
-                char sender[MAX_NAME_BYTES + 1] = {0};
-                user_data_search(&pointer, &quinter, sender_search, sender, MAX_NAME_BYTES + 1);
-                printf("sender = %s\n", sender);
-
-                // Title
-                char title[MAX_TITLE_BYTES + 1] = {0};
-                user_data_search(&pointer, &quinter, title_search, title, MAX_TITLE_BYTES + 1);
-                printf("title = %s\n", title);
-
-                // Hash
-                char hash_as_string[32] = {0};
-                user_data_search(&pointer, &quinter, hash_search, hash_as_string, 32);
-                printf("hash_as_string = %s\n", hash_as_string);
-
-                // Will segfault if string is to big
-                int hash = atoi(hash_as_string);
-
-                // Body               
-                char body[MAX_COMPOSE_BYTES + 1] = {0};
-                user_data_search(&pointer, &quinter, body_search, body, MAX_COMPOSE_BYTES + 1); 
-                printf("body = %s\n", body);
-
-                // Upvotes
-                char upvotes_as_string[32] = {0};
-                user_data_search(&pointer, &quinter, upvotes_search, upvotes_as_string, 32);
-                printf("upvotes_as_string = %s\n", upvotes_as_string);
-
-                int upvotes = atoi(upvotes_as_string);
+                pointer = file_buffer;
+                end = file_buffer + bytes_read;
                 
-                // Date
-                char time_as_string[64] = {0};
-                user_data_search(&pointer, &quinter, time_search, time_as_string, 64);
-                printf("time_as_string = %s\n", time_as_string);
+                while (pointer < end) {
+                    printf("\nemail\n");
+                    // Sender
+                    char sender[MAX_NAME_BYTES + 1] = {0};
+                    pointer = strstr(pointer, sender_search);
+                    if (pointer == 0) {
+                        printf("Couldn't find sender start\n"); exit(1);}
+                    pointer += strlen(sender_search);
+                    quinter = strstr(pointer, DELIMITER);
+                    if (pointer == 0) {
+                        printf("Couldn't find sender start delimiter\n"); exit(1);}
+                    strncpy(sender, pointer, min(quinter - pointer, MAX_NAME_BYTES + 1));
+                    printf("sender = %s\n", sender);
 
-                size_t time = atoi(time_as_string);
+                    // Title
+                    char title[MAX_NAME_BYTES + 1] = {0};
+                    pointer = strstr(quinter, title_search);
+                    if (pointer == 0) {
+                        printf("Couldn't find title start\n"); exit(1);}
+                    pointer += strlen(title_search);
+                    quinter = strstr(pointer, DELIMITER);
+                    if (pointer == 0) {
+                        printf("Couldn't find title start delimiter\n"); exit(1);}
+                    strncpy(title, pointer, min(quinter - pointer, MAX_TITLE_BYTES + 1));
+                    printf("title = %s\n", title);
 
-                pointer += strlen(DELIMITER);
+                    // Hash
+                    char hash_as_string[32] = {0};
+                    pointer = strstr(quinter, hash_search);
+                    if (pointer == 0) {
+                        printf("Couldn't find hash start\n"); exit(1);}
+                    pointer += strlen(hash_search);
+                    quinter = strstr(pointer, DELIMITER);
+                    if (pointer == 0) {
+                        printf("Couldn't find hash start delimiter\n"); exit(1);}
+                    strncpy(hash_as_string, pointer, min(quinter - pointer, 32));
+                    int hash = atoi(hash_as_string);
+                    printf("hash = %d\n", hash);
 
-                struct email* email = (struct email*) calloc(1, sizeof(struct email));
+                    // Body
+                    char body[MAX_COMPOSE_BYTES + 1] = {0};
+                    pointer = strstr(quinter, body_search);
+                    if (pointer == 0) {
+                        printf("Couldn't find body start\n"); exit(1);}
+                    pointer += strlen(body_search);
+                    quinter = strstr(pointer, DELIMITER);
+                    if (pointer == 0) {
+                        printf("Couldn't find body start delimiter\n"); exit(1);}
+                    strncpy(body, pointer, min(quinter - pointer, MAX_COMPOSE_BYTES + 1));
+                    printf("body = %s\n", body);
 
-                strncpy(email->sender, sender, strlen(sender));
-                strncpy(email->title, title, strlen(title));
-                email->hash = hash;
-                strncpy(email->body, body, strlen(body));
-                email->upvotes = upvotes;
-                email->time_created = time;
+                    // Upvotes
+                    char upvotes_as_string[32] = {0};
+                    pointer = strstr(quinter, upvotes_search);
+                    if (pointer == 0) {
+                        printf("Couldn't find upvotes start\n"); exit(1);}
+                    pointer += strlen(upvotes_search);
+                    quinter = strstr(pointer, DELIMITER);
+                    if (pointer == 0) {
+                        printf("Couldn't find upvotes start delimiter\n"); exit(1);}
+                    strncpy(upvotes_as_string, pointer, min(quinter - pointer, 32));
+                    int upvotes = atoi(upvotes_as_string);
+                    printf("upvotes = %d\n", upvotes);
 
-                email->next = emails;
-                emails = email;
-                num_of_emails++;
-            }
-            if (num_of_emails == 0) {
-                exit_print_line; }
-        }
+                    printf("pointer before time = %s\n", pointer);
+                    // Time
+                    char time_as_string[32] = {0};
+                    pointer = strstr(quinter, time_search);
+                    printf("pointer after strstr = %s\n", pointer);
+                    if (pointer == 0) {
+                        printf("Couldn't find time start\n"); exit(1);}
+                    pointer += strlen(time_search);
+                    printf("pointer after += = %s\n", pointer);
+                    quinter = strstr(pointer, DELIMITER);
+                    printf("quinter after strstr = %s\n", quinter);
+                    if (pointer == 0) {
+                        printf("Couldn't find time start delimiter\n"); exit(1);}
+                    strncpy(time_as_string, pointer, min(quinter - pointer, 32));
+                    int time_created = atoi(time_as_string);
+                    printf("time_created = %d\n", time_created);
 
-        char end_search[16] = {0};
-        sprintf(end_search, "%suser_end:", DELIMITER);
+                    pointer = quinter + strlen(DELIMITER);
 
-        char* end = strstr(emails_start, end_search);
-        if (end == 0) {
-            exit_print_line; }
+                    struct email* email = (struct email*) calloc(1, sizeof(struct email));
 
-        struct vote* votes = NULL;
+                    strncpy(email->sender, sender, strlen(sender));
+                    strncpy(email->title, title, strlen(title));
+                    email->hash = hash;
+                    strncpy(email->body, body, strlen(body));
+                    email->upvotes = upvotes;
+                    email->time_created = time_created;
 
-        pointer = voted_start;
-        // Has votes
-        if (pointer + strlen(voted_start_search) != end) {
-            printf("\nvote\n");
+                    email->next = emails;
+                    emails = email;
+                }
+            } else if (strcmp(user_dir->d_name, "votes") == 0) {
+                FILE* fp = fopen(component_path, "r");
+                if (fp == NULL) {
+                    printf("couldn't open user votes file\n"); exit(1);}
 
-            char sender_search[16] = {0};
-            sprintf(sender_search, "%ssender: ", DELIMITER);
+                int bytes_read = fread(file_buffer, 1, MAX_FILE_SIZE, fp);
+                if (bytes_read >= MAX_FILE_SIZE) {
+                    printf("bruh, file it way too big\n"); exit(1);}
 
-            char title_search[16] = {0};
-            sprintf(title_search, "%stitle: ", DELIMITER);
+                pointer = file_buffer;
+                end = file_buffer + bytes_read;
 
-            char hash_search[16] = {0};
-            sprintf(hash_search, "%shash: ", DELIMITER);
+                while (pointer < end) {
+                    printf("\nvote\n");
+                    // Sender
+                    char sender[MAX_NAME_BYTES + 1] = {0};
+                    pointer = strstr(pointer, sender_search);
+                    if (pointer == 0) {
+                        printf("Couldn't find sender start\n"); exit(1);}
+                    pointer += strlen(sender_search);
+                    quinter = strstr(pointer, DELIMITER);
+                    if (pointer == 0) {
+                        printf("Couldn't find sender start delimiter\n"); exit(1);}
+                    strncpy(sender, pointer, min(quinter - pointer, MAX_NAME_BYTES + 1));
+                    printf("sender = %s\n", sender);
 
-            int num_of_votes = 0;
-            while (pointer < end) {
-                // Sender
-                char sender[MAX_NAME_BYTES + 1] = {0};
-                user_data_search(&pointer, &quinter, sender_search, sender, MAX_NAME_BYTES + 1);
+                    // Title
+                    char title[MAX_NAME_BYTES + 1] = {0};
+                    pointer = strstr(quinter, title_search);
+                    if (pointer == 0) {
+                        printf("Couldn't find title start\n"); exit(1);}
+                    pointer += strlen(title_search);
+                    quinter = strstr(pointer, DELIMITER);
+                    if (pointer == 0) {
+                        printf("Couldn't find title start delimiter\n"); exit(1);}
+                    strncpy(title, pointer, min(quinter - pointer, MAX_TITLE_BYTES + 1));
+                    printf("title = %s\n", title);
 
-                // Title
-                char title[MAX_TITLE_BYTES + 1] = {0};
-                user_data_search(&pointer, &quinter, title_search, title, MAX_TITLE_BYTES + 1);
+                    // Hash
+                    char hash_as_string[32] = {0};
+                    pointer = strstr(quinter, hash_search);
+                    if (pointer == 0) {
+                        printf("Couldn't find hash start\n"); exit(1);}
+                    pointer += strlen(hash_search);
+                    quinter = strstr(pointer, DELIMITER);
+                    if (pointer == 0) {
+                        printf("Couldn't find hash start delimiter\n"); exit(1);}
+                    strncpy(hash_as_string, pointer, min(quinter - pointer, 32));
+                    int hash = atoi(hash_as_string);
+                    printf("hash = %d\n", hash);
 
-                // Hash
-                char hash_as_string[32] = {0};
-                user_data_search(&pointer, &quinter, hash_search, hash_as_string, 32);
+                    pointer = quinter + strlen(DELIMITER);
 
-                // Will segfault if string is to big
-                int hash = atoi(hash_as_string);
+                    struct vote* vote = (struct vote*) calloc(1, sizeof(struct vote));
 
-                pointer += strlen(DELIMITER);
+                    strncpy(vote->sender, sender, strlen(sender));
+                    strncpy(vote->title, title, strlen(title));
+                    vote->hash = hash;
 
-                struct vote* vote = (struct vote*) calloc(1, sizeof(struct vote));
-
-                strncpy(vote->sender, sender, strlen(sender));
-                strncpy(vote->title, title, strlen(title));
-                vote->hash = hash;
-
-                vote->next = votes;
-                votes = vote;
-                num_of_votes++;
-            }
-            if (num_of_votes == 0) {
-                exit_print_line; }
-        }
-
+                    vote->next = votes;
+                    votes = vote;
+                }
+            } else {
+                printf("bad file in user directory\n"); exit(1);}
+        } // end of user component while loop
+        closedir(dir2);
+        memcpy(user->username, users_dir->d_name, MAX_NAME_BYTES + 1);
         user->emails = emails;
         user->votes = votes;
         user->next = users;
         users = user;
-    }
+    } // end of users while loop
+    closedir(dir);
 
     printf("    |Printing Users|\n");
     if (users == NULL) {
@@ -296,6 +326,98 @@ struct user* init_users() {
 #if DEBUG_INIT_USERS != true
 #undef printf
 #endif
+
+
+void save_users_to_file(struct user* users) {
+    printf("\nsaving users to file\n");
+    if (users == NULL) {
+        return;}
+    
+    struct stat st = {0};
+    if (stat("public", &st) == -1) {
+        perror("public doesn't exist\n");
+        exit(1); // Would be weird if public didn't exist
+    }
+
+    if (stat("public/users", &st) == -1) {
+        printf("Creating public/users");
+        mkdir("public/users", 0770);}
+
+    struct user* user_head = users;
+    while (user_head) {
+        printf("    |Saving user: %s|\n", user_head->username);
+
+        char user_dir[128] = {0};
+        sprintf(user_dir, "public/users/%s", user_head->username);
+        if (stat(user_dir, &st) == -1) {
+            mkdir(user_dir, 0770);
+            perror("dir err if exists: ");
+        }
+
+        char user_emails_location[128] = {0};
+        sprintf(user_emails_location, "public/users/%s/emails", user_head->username);
+        FILE* fp = fopen(user_emails_location, "w");
+        if (fp == NULL) {
+            perror("couldn't open user email file\n"); return;}
+
+        struct email* email_head = user_head->emails;
+        while (email_head) {
+            fprintf(fp, "sender: ");
+            fprintf(fp, "%s", email_head->sender);
+            fprintf(fp, "%s", DELIMITER);
+
+            fprintf(fp, "title: ");
+            fprintf(fp, "%s", email_head->title);
+            fprintf(fp, "%s", DELIMITER);
+
+            fprintf(fp, "hash: ");
+            fprintf(fp, "%d", email_head->hash);
+            fprintf(fp, "%s", DELIMITER);
+
+            fprintf(fp, "body: ");
+            fprintf(fp, "%s", email_head->body);
+            fprintf(fp, "%s", DELIMITER);
+
+            fprintf(fp, "upvotes: ");
+            fprintf(fp, "%d", email_head->upvotes);
+            fprintf(fp, "%s", DELIMITER);
+
+            fprintf(fp, "time_created: ");
+            fprintf(fp, "%ld", email_head->time_created);
+            fprintf(fp, "%s", DELIMITER);
+
+            email_head = email_head->next;
+        }
+        fclose(fp);
+        
+        char user_votes_location[128] = {0};
+        sprintf(user_votes_location, "public/users/%s/votes", user_head->username);
+        fp = fopen(user_votes_location, "w");
+        if (fp == NULL) {
+            perror("couldn't open user votes file\n");
+            return;}
+        
+        struct vote* vote_head = user_head->votes;
+        while (vote_head) {
+            fprintf(fp, "sender: ");
+            fprintf(fp, "%s", vote_head->sender);
+            fprintf(fp, "%s", DELIMITER);
+
+            fprintf(fp, "title: ");
+            fprintf(fp, "%s", vote_head->title);
+            fprintf(fp, "%s", DELIMITER);
+
+            fprintf(fp, "hash: ");
+            fprintf(fp, "%d", vote_head->hash);
+            fprintf(fp, "%s", DELIMITER);
+
+            vote_head = vote_head->next;
+        }
+        fclose(fp);
+
+        user_head = user_head->next;
+    }
+}
 
 
 void print_users(struct user* users) {
@@ -656,170 +778,288 @@ int num_kosher_chars(char* string, int type) {
     return char_count;
 }
 
-void handle_put(struct client_info* client, struct client_info** clients_ptr) {
+typedef enum vote_types {
+    UPVOTE, UNUPVOTE
+} vote_types;
+
+// Finding boundary and strstring that would be more robust
+void handle_put(struct client_info* client, struct client_info** clients_ptr, struct user* users) {
     printf("handle_put()\n");
 
     char* end = client->received + client->request;
     char* pointer = client->request;
     char* quinter;
     
-    char* headerType = "PUT / HTTP1.1\r\n";
-    if (pointer + strlen(headerType) >= end || strncmp(pointer, headerType, strlen(headerType))) {
-        print_msg_send400_return("First put line malformed\n");
-    }
-    pointer += strlen(headerType);
+    char* header_type = "PUT / HTTP/1.1\r\n";
+    if (pointer + strlen(header_type) >= end || strncmp(pointer, header_type, strlen(header_type))) {
+        print_msg_send400_return("First put line malformed\n");}
+    pointer += strlen(header_type);
+
+    // Vote type
+    char* vote_start = ("Content-Disposition: form-data; name=\"vote_type\"\r\n\r\n");
+    if (pointer + strlen(vote_start) >= end) {
+        print_msg_send400_return("Failed to find vote type start, not enough data\n");}
+    pointer = strstr(pointer, vote_start);
+    if (pointer == 0) {
+        print_msg_send400_return("Failed to find vote type start\n");}
+    pointer += strlen(vote_start);
+
+    quinter = strstr(pointer, "\r\n");
+    if (quinter == 0) {
+        print_msg_send400_return("Failed to find vote type end\n");}
+    
+    if (quinter - pointer > strlen("unupvote")) {
+        print_msg_send400_return("Vote type too large\n");}
+
+    vote_types vote_type;
+    if (strncmp(pointer, "upvote", 6) == 0) {
+        vote_type = UPVOTE;
+    } else if (strncmp(pointer, "unupvote", 8) == 0) {
+        vote_type = UNUPVOTE;
+    } else {
+        print_msg_send400_return("Unknown vote type\n");}
 
     // Username
-    char* usernameStart = ("Content-Disposition: form-data; name=\"username\"\r\n");
+    char* usernameStart = ("Content-Disposition: form-data; name=\"username\"\r\n\r\n");
     if (pointer + strlen(usernameStart) >= end) {
         print_msg_send400_return("Failed to find username start, not enough data\n");
-    }
+        }
     pointer = strstr(pointer, usernameStart);
-    if (pointer == NULL) {
-        print_msg_send400_return("Failed to find username start\n");
-    }
+    if (pointer == 0) {
+        print_msg_send400_return("Failed to find username start\n");}
     pointer += strlen(usernameStart);
 
     quinter = strstr(pointer, "\r\n");
     if (quinter == 0) {
-        print_msg_send400_return("Failed to find username end\n");
-    }
+        print_msg_send400_return("Failed to find username end\n");}
 
     // Removes whitespace from the middle so Mike and M ike are the same in the database
     char username[MAX_NAME_BYTES + 1] = {0};
-    for (int i = 0; i < quinter - pointer; i++) {
-        if (*pointer == ' ' || *pointer == '\t' || *pointer == '\n' || *pointer == '\r'){
-            continue;
-        }
-        username[i] = pointer[i];
-    }
-
-    // Remove whitespace from end
-    char* end_of_username = quinter - 1;
-    int white_space_count = 0;
-    while (*end_of_username == ' ' || *end_of_username == '\t' || *end_of_username == '\n' || *end_of_username == '\r') {
-        if (end_of_username <= pointer) {
-            break;
-        }
-        *end_of_username = 0;
-        end_of_username--;
-        white_space_count++;
-    }
-
-    if (quinter - pointer - white_space_count <= 0) {
-        print_msg_send400_return("Received empty username\n");
-    }
-    username[quinter - pointer - white_space_count] = 0;
-    if (strlen(username) == 0) {
-        print_msg_send400_return("Received empty username\n");
-    }
-
-    int kosher_chars;
-    kosher_chars = num_kosher_chars(username, 0);
-    if (kosher_chars <= 0) {
-        print_msg_send400_return("Username is not kosher");
-    }
-    if (kosher_chars > MAX_NAME_CHARACTERS) {
-        print_msg_send400_return("Username contained too many characterss");
-    }
-
-    if (contains_profanity(username)) {
-        print_msg_send400_return("Username has swears );");
-    }
+    char error_msg[ERR_MSG_BUF_LEN] = {0};
+    memcpy(error_msg, "Username: ", 10);
+    sanitize_name(pointer, username, min(quinter - pointer, MAX_NAME_BYTES + 1), error_msg + 10);
+    if (strlen(error_msg) > 10) {
+        print_msg_send400_return(error_msg);}
+    printf("username = %s\n", username);
 
 
     // Sender
-    char* senderStart = ("Content-Disposition: form-data; name=\"sender\"\r\n");
+    char* senderStart = ("Content-Disposition: form-data; name=\"sender\"\r\n\r\n");
     if (pointer + strlen(senderStart) >= end) {
-        print_msg_send400_return("Failed to find sender start, not enough data\n");
-    }
+        print_msg_send400_return("Failed to find sender start, not enough data\n");}
     pointer = strstr(pointer, senderStart);
-    if (pointer == NULL) {
-        print_msg_send400_return("Failed to find sender start\n");
-    }
+    if (pointer == 0) {
+        print_msg_send400_return("Failed to find sender start\n");}
     pointer += strlen(senderStart);
 
     quinter = strstr(pointer, "\r\n");
     if (quinter == 0) {
-        print_msg_send400_return("Failed to find sender end\n");
-    }
+        print_msg_send400_return("Failed to find sender end\n");}
 
-    // Removes whitespace from the middle so Mike and M ike are the same in the database,
-    //      should probably also tolower() it
     char sender[MAX_NAME_BYTES + 1] = {0};
-    for (int i = 0; i < quinter - pointer; i++) {
-        if (*pointer == ' ' || *pointer == '\t' || *pointer == '\n' || *pointer == '\r'){
-            continue;
-        }
-        sender[i] = pointer[i];
-    }
+    memset(error_msg, 0 , ERR_MSG_BUF_LEN);
+    memcpy(error_msg, "Sender: ", 8);
+    sanitize_name(pointer, sender, min(quinter - pointer, MAX_NAME_BYTES + 1), error_msg + 10);
+    if (strlen(error_msg) > 8) {
+        print_msg_send400_return(error_msg);}
+    printf("sender = %s\n", sender);
 
-    // Remove whitespace from end
-    char* end_of_sender = quinter - 1;
-    white_space_count = 0;
-    while (*end_of_sender == ' ' || *end_of_sender == '\t' || *end_of_sender == '\n' || *end_of_sender == '\r') {
-        if (end_of_sender <= pointer) {
-            break;
-        }
-        *end_of_sender = 0;
-        end_of_sender--;
-        white_space_count++;
-    }
+    // Title 
+    char* titleStart = ("Content-Disposition: form-data; name=\"title\"\r\n\r\n");
+    if (pointer + strlen(titleStart) >= end) {
+        print_msg_send400_return("Failed to find title start, not enough data\n");}
+    pointer = strstr(pointer, titleStart);
+    if (pointer == 0) {
+        print_msg_send400_return("Failed to find title start\n");}
+    pointer += strlen(titleStart);
 
-    if (quinter - pointer - white_space_count <= 0) {
-        print_msg_send400_return("Received empty sender\n");
-    }
-    sender[quinter - pointer - white_space_count] = 0;
-    if (strlen(sender) == 0) {
-        print_msg_send400_return("Received empty sender\n");
-    }
+    quinter = strstr(pointer, "\r\n");
+    if (quinter == 0) {
+        print_msg_send400_return("Failed to find title end\n");}
 
-    kosher_chars = num_kosher_chars(sender, 0);
-    if (kosher_chars <= 0) {
-        print_msg_send400_return("Sender is not kosher");
-    }
-    if (kosher_chars > MAX_NAME_CHARACTERS) {
-        print_msg_send400_return("Sender contained too many characterss");
-    }
+    char title[MAX_TITLE_BYTES + 1] = {0};
+    memset(error_msg, 0 , ERR_MSG_BUF_LEN);
+    sanitize_title(pointer, title, min(quinter - pointer, MAX_NAME_BYTES + 1), error_msg);
+    if (strlen(error_msg) > 0) {
+        print_msg_send400_return(error_msg);}
+    printf("title = %s\n", title);
 
-    if (contains_profanity(sender)) {
-        print_msg_send400_return("Sender has swears );");
-    }
 
     // Hash
-    char* hashStart = ("Content-Disposition: form-data; name=\"hash\"\r\n");
+    char* hashStart = ("Content-Disposition: form-data; name=\"hash\"\r\n\r\n");
     if (pointer + strlen(hashStart) >= end) {
-        print_msg_send400_return("Failed to find hash start, not enough data\n");
-    }
+        print_msg_send400_return("Failed to find hash start, not enough data\n"); }
     pointer = strstr(pointer, hashStart);
-    if (pointer == NULL) {
-        print_msg_send400_return("Failed to find hash start\n");
-    }
+    if (pointer == 0) {
+        print_msg_send400_return("Failed to find hash start\n");}
     pointer += strlen(hashStart);
 
     quinter = strstr(pointer, "\r\n");
     if (quinter == 0) {
-        print_msg_send400_return("Failed to find hash end\n");
-    }
+        print_msg_send400_return("Failed to find hash end\n");}
 
     // Biggest hash possible is 4,294,967,295, 10 characters
     if (quinter - pointer > 10 /*11?*/) {
-        print_msg_send400_return("Hash is larger than possible\n");
-    }
+        print_msg_send400_return("Hash is larger than possible\n");}
 
-    char hash[16] = {0};
+    char hash_as_string[32] = {0};
     for (int i = 0; i < quinter - pointer; i++) {
         if (!isdigit(pointer[i])) {
-            print_msg_send400_return("Non-digit found in hash\n");
-        }
-        sender[i] = pointer[i];
+            print_msg_send400_return("Non-digit found in hash\n");}
+        hash_as_string[i] = pointer[i];
     }
 
-    if (strlen(hash) == 0) {
-        print_msg_send400_return("Received empty hash\n");
-    }
+    if (strlen(hash_as_string) == 0) {
+        print_msg_send400_return("Received empty hash\n");}
+    
+    int hash = atoi(hash_as_string);
+    printf("hash = %d\n", hash);
 
     // Search 
+    struct user* user = search_for_user(username, users);
+    if (user == NULL) {
+        print_msg_send400_return("Vote, user not found\n");}
+    
+    struct email* email = search_for_email(user, sender, title, hash);
+    if (email == (struct email*) -1) {
+        print_msg_send400_return("Error during email search\n");}
+    if (email == NULL) {
+        print_msg_send400_return("Trying to vote on email that doesn't exist\n");}
+
+    struct vote* seen_vote = search_for_vote(user, sender, title, hash);
+    if (seen_vote == (struct vote*) -1) {
+        print_msg_send400_return("Error during vote search\n");}
+    if (seen_vote != NULL && vote_type == UPVOTE) {
+        print_msg_send400_return("Already upvoted this email\n");}
+    if (seen_vote == NULL && vote_type == UNUPVOTE) {
+        print_msg_send400_return("Can't unupvote when vote doesn't exist\n");}
+
+    if (vote_type == UPVOTE) {
+        struct vote* new_vote = (struct vote*) calloc(1, sizeof(struct vote));
+        if (new_vote == NULL) {
+            printf("Calloc fail\n");
+            send_507(client, clients_ptr);
+            return;
+        }
+        strncpy(new_vote->sender, sender, MAX_NAME_BYTES + 1);
+        strncpy(new_vote->title, title, MAX_TITLE_BYTES + 1);
+        new_vote->hash = hash;
+
+        new_vote->next = user->votes;
+
+        user->votes->prev = new_vote;
+        user->votes = new_vote;
+
+        email->upvotes += 1;
+    }
+
+    if (vote_type == UNUPVOTE) {
+        if (email->upvotes <= 0) {
+            char msg[256] = {0};
+            strcpy(msg, "Somehow vote exists on emails with 0 or less upvotes (major error)\n");
+            printf("%s", msg);
+            send_500(client, clients_ptr, msg);
+            return;
+        }
+        struct vote* temp = seen_vote;
+
+        if (temp->prev = NULL) {
+            if (user->votes == temp) {
+                user->votes = temp->next;
+            }
+            temp->next->prev = NULL;
+        } else {
+            temp->prev->next = temp->next;
+            temp->next->prev = temp->prev;
+        }
+
+        free(temp);
+
+        email->upvotes -= 1;
+    }
+
+
+}
+
+// Returns email* if found, NULL if not found, -1 if error
+// Hashmap filled with seen usernames would be more robust
+struct email* search_for_email(struct user* user, char* sender, char* title, int hash) {
+    struct email* err_ret = (struct email*) -1;
+    if (user == NULL) {
+        printf("search_for_email called will NULL user\n"); return err_ret;}
+    if (sender == NULL) {
+        printf("search_for_email called will NULL sender\n"); return err_ret;}
+    if (title == NULL) {
+        printf("search_for_email called will NULL title\n"); return err_ret;}
+    if (hash == 0) {
+        printf("search_for_email called will 0 hash\n"); return err_ret;}
+
+    int count = 0;
+    const int max_loops = 10000;
+    struct email* email_head = user->emails;
+    while (email_head) {
+        if (strncmp(email_head->sender, sender, MAX_NAME_BYTES + 1) == 0) {
+            if (strncmp(email_head->title, title, MAX_TITLE_BYTES + 1) == 0) {
+                if (email_head->hash == hash) {
+                    break;
+                }
+            }
+        }
+        email_head = email_head->next;
+        if (count++ > max_loops) {
+            return err_ret;}
+    }
+    return email_head;
+}
+
+// Returns vote* if found, NULL if not found, -1 if error
+// Hashmap filled with seen usernames would be more robust
+struct vote* search_for_vote(struct user* user, char* sender, char* title, int hash) {
+    struct vote* err_ret = (struct vote*) -1;
+    if (user == NULL) {
+        printf("search_for_vote called will NULL user\n"); return err_ret;}
+    if (sender == NULL) {
+        printf("search_for_vote called will NULL sender\n"); return err_ret;}
+    if (title == NULL) {
+        printf("search_for_vote called will NULL title\n"); return err_ret;}
+    if (hash == 0) {
+        printf("search_for_vote called will 0 hash\n"); return err_ret;}
+
+    int count = 0;
+    const int max_loops = 10000;
+    struct vote* vote_head = user->votes;
+    while (vote_head) {
+        if (strncmp(vote_head->sender, sender, MAX_NAME_BYTES + 1) == 0) {
+            if (strncmp(vote_head->title, title, MAX_TITLE_BYTES) == 0) {
+                if (vote_head->hash == hash) {
+                    break;
+                }
+            }
+        }
+        vote_head = vote_head->next;
+        if (count++ > max_loops) {
+            return err_ret;}
+    }
+    return vote_head;
+}
+
+
+// Returns user* if found, NULL if not found or error
+// Hashmap filled with seen usernames would be more robust
+struct user* search_for_user(char* username, struct user* users) {
+    if (users == NULL) {
+        printf("search_for_user called will NULL users\n"); return NULL;}
+    struct user* user_head = users;
+    int count = 0;
+    const int max_loops = 10000;
+    while (user_head) {
+        if (strncmp(user_head->username, username, MAX_NAME_BYTES + 1) == 0) {
+            break;}
+        user_head = user_head->next;
+        if (count++ > max_loops) {
+            return NULL;}
+    }
+    return user_head;
 }
 
 
@@ -836,13 +1076,11 @@ void handle_post(struct client_info* client, struct client_info** clients_ptr, s
     
     // pointer + 17 >= end is untested, might reject valid posts
     if (pointer + 17 >= end || strncmp(pointer, "POST / HTTP/1.1\r\n", 17) != 0) {
-        printf("First post line malformed\n");
-        send_400(client, clients_ptr, NULL);
-        return;
-    }
+        print_msg_send400_return("First post line malformed\n");}
 
     // FIND CONTENT LENGTH
-    #define contentLengthFail(x) printf("Failed to parse content length. Line %d\n", x); \
+    #define contentLengthFail(x) \
+        printf("Failed to parse content length. Line %d\n", x); \
         send_400(client, clients_ptr, NULL); \
         return
 
@@ -962,7 +1200,7 @@ void handle_post(struct client_info* client, struct client_info** clients_ptr, s
             return; \
         }\
         printf("max parse failures\n"); \
-        send_400(client, clients_ptr, y); \
+        send_400(client, clients_ptr, NULL); \
         return; \
 
     // GET USERNAME ///////////////////////////////////////////////
@@ -992,7 +1230,7 @@ void handle_post(struct client_info* client, struct client_info** clients_ptr, s
     }
     pointer += 2;
 
-    quinter = strstr(pointer, boundary);
+    quinter = strstr(pointer, boundary) - 2;
     if (quinter - pointer <= 2 || quinter - pointer > MAX_NAME_BYTES + 2) {
         printf("pointer = %p\n", pointer);
         printf("quinter = %p\n", quinter);
@@ -1011,237 +1249,124 @@ void handle_post(struct client_info* client, struct client_info** clients_ptr, s
         printf("quinter = %p\n", quinter);
         locateContentFail(__LINE__, "");
     }
+
+    //printf("BEFORE, POINTER = %s\n", pointer);
+    //printf("BEFORE, QUINTER = %s\n", quinter);
     
-    // Removes whitespace from the middle so Mike and M ike are the same in the database,
-    //      should probably also tolower() it
+    // Removes whitespace and tolowers so Mike and m ike are the same in the database
     char username[MAX_NAME_BYTES + 1] = {0};
-    for (int i = 0; i < quinter - pointer; i++) {
-        if (*pointer == ' ' || *pointer == '\t' || *pointer == '\n' || *pointer == '\r'){
-            continue;
-        }
-        username[i] = pointer[i];
-    }
-    // Remove whitespace from end
-    char* endOfUsername = quinter - 1;
-    int whiteSpaceCount = 0;
-    while (*endOfUsername == ' ' || *endOfUsername == '\t' || *endOfUsername == '\n' || *endOfUsername == '\r') {
-        //printf("whitepsace removed\n");
-        if (endOfUsername <= pointer) {
-            break;
-        }
-        *endOfUsername = 0;
-        endOfUsername--;
-        whiteSpaceCount++;
-    }
+    char error_msg[ERR_MSG_BUF_LEN] = {0};
+    memcpy(error_msg, "Username: ", 10);
+    sanitize_name(pointer, username, min(quinter - pointer, MAX_NAME_BYTES + 1), error_msg + 10);
+    if (strlen(error_msg) > 10) {
+        locateContentFail(__LINE__, error_msg);}
 
-    if (quinter - pointer - whiteSpaceCount <= 0) {
-        printf("Received empty username\n");
-        send_400(client, clients_ptr, "Empty username");
-        return;
-    }
-    username[quinter - pointer - whiteSpaceCount] = 0;
+    //printf("USERNAME = %s\n", username);
+    //printf("POINTER = %s\n", pointer);
 
-    // Check if username string is empty
-    if (strlen(username) == 0) {
-        printf("Received empty username\n");
-        send_400(client, clients_ptr, "Empty username");
-        return;
-    }
-
-    int kosher_chars;
-    kosher_chars = num_kosher_chars(username, 0);
-    if (kosher_chars <= 0) {
-        locateContentFail(__LINE__, "Username is not kosher");
-    }
-    if (kosher_chars > MAX_NAME_CHARACTERS) {
-        locateContentFail(__LINE__, "Username contained too many characterss");
-    }
-
-    if (contains_profanity(username)) {
-        locateContentFail(__LINE__, "Username has swears );");
-    }
-
-    pointer = strstr(quinter, "\r\n");
+    pointer = strstr(quinter, boundary);
     if (pointer == 0) {
-        locateContentFail(__LINE__, "");
-    }
+        locateContentFail(__LINE__, "");}
+    pointer = strstr(pointer, "\r\n");
+    if (pointer == 0) {
+        locateContentFail(__LINE__, "");}
     pointer += 2;
     // END USERNAME ///////////////////////////////////////////////
 
     // GET RECIPIENT ////////////////////////////////////////////////
-    if (strncmp(pointer, "Content-Disposition: form-data; name=\"recipient\"", 48) != 0) {
-        locateContentFail(__LINE__, "");
-    }
+    //printf("pointer = %s\n", pointer);
+    if (end - pointer < 48 || strncmp(pointer, "Content-Disposition: form-data; name=\"recipient\"", 48) != 0) {
+        locateContentFail(__LINE__, "");}
     pointer += 48;
 
     if (strncmp(pointer, "\r\n", 2) != 0) {
-        locateContentFail(__LINE__, "");
-    }
+        locateContentFail(__LINE__, "");}
     pointer += 2;
 
-    quinter = strstr(pointer, boundary);
+    quinter = strstr(pointer, boundary) - 2;
     if (quinter - pointer <= 2 || quinter - pointer > MAX_NAME_BYTES + 2) {
-        locateContentFail(__LINE__, "");
-    }
+        locateContentFail(__LINE__, "");}
 
     // Should skip through whitespace
     while (*pointer == ' ' || *pointer == '\t' || *pointer == '\n' || *pointer == '\r'){
         pointer++;
         if (pointer >= end) {
-            locateContentFail(__LINE__, "");
-        }
+            locateContentFail(__LINE__, "");}
     }
     if (quinter - pointer > MAX_NAME_BYTES) {
-        locateContentFail(__LINE__, "");
-    }
-    char recipient[MAX_NAME_BYTES + 1];
-    for (int i = 0; i < quinter - pointer; i++) {
-        recipient[i] = pointer[i];
-    }
-    // Remove whitespace from end
-    char* endOfRecipient = quinter - 1;
-    whiteSpaceCount = 0;
-    while (*endOfRecipient == ' ' || *endOfRecipient == '\t' || *endOfRecipient == '\n' || *endOfRecipient == '\r') {
-        //printf("whitepsace removed\n");
-        if (endOfRecipient <= pointer) {
-            break;
-        }
-        *endOfRecipient = 0;
-        endOfRecipient--;
-        whiteSpaceCount++;
-    }
+        locateContentFail(__LINE__, "");}
+    //printf("BEFORE, POINTER = %s\n", pointer);
+    //printf("BEFORE, QUINTER = %s\n", quinter);
+    
+    // Removes whitespace and tolowers so Mike and m ike are the same in the database
+    char recipient[MAX_NAME_BYTES + 1] = {0};
+    memset(error_msg, 0 , ERR_MSG_BUF_LEN);
+    memcpy(error_msg, "Username: ", 10);
+    sanitize_name(pointer, recipient, min(quinter - pointer, MAX_NAME_BYTES + 1), error_msg + 10);
+    if (strlen(error_msg) > 10) {
+        locateContentFail(__LINE__, error_msg);}
 
-    if (quinter - pointer - whiteSpaceCount <= 0) {
-        printf("Received empty recipient\n");
-        send_400(client, clients_ptr, "Empty recipient");
-        return;
-    }
-    recipient[quinter - pointer - whiteSpaceCount] = 0;
+    //printf("USERNAME = %s\n", username);
+    //printf("POINTER = %s\n", pointer);
 
-    // Check if recipient string is empty
-    if (strlen(recipient) == 0) {
-        printf("Received empty recipient\n");
-        send_400(client, clients_ptr, "Empty recipient");
-        return;
-    }
+    pointer = strstr(quinter, boundary);
+    if (pointer == 0) {
+        locateContentFail(__LINE__, "");}
+    pointer = strstr(pointer, "\r\n");
+    if (pointer == 0) {
+        locateContentFail(__LINE__, "");}
+    pointer += 2;
 
     // Check if recipient is sender (username)
     bool recip_equals_sender = false;
     if (strlen(recipient) == strlen(username)) {
         recip_equals_sender = true;
         for (int i = 0; i < strlen(recipient); i++) {
-            unsigned char byte = username[i]; 
-            if (byte >> 7 == 0) {
-                // ANSI character if topmost bit is 0
-                if (tolower(recipient[i]) != tolower(username[i])) {
-                    recip_equals_sender = false;
-                    break;
-                }
-                continue;
-            }
             if (recipient[i] != username[i]) {
                 recip_equals_sender = false;
                 break;
             }
         }
     }
-    if (recip_equals_sender) {
-        locateContentFail(__LINE__, "Recipient equals sender");
-    }
-
-    kosher_chars = num_kosher_chars(recipient, 0);
-    if (kosher_chars <= 0) {
-        locateContentFail(__LINE__, "Recipient is not kosher");
-    }
-    if (kosher_chars > MAX_NAME_CHARACTERS) {
-        locateContentFail(__LINE__, "Recipient contained too many characterss");
-    }
-
-    if (contains_profanity(recipient)) {
-        locateContentFail(__LINE__, "Recipient has swears );");
-    }
-
-    pointer = strstr(quinter, "\r\n");
-    if (pointer == 0) {
-        locateContentFail(__LINE__, "");
-    }
-    pointer += 2;
     // END RECIPIENT ////////////////////////////
 
     // GET TITLE ////////////////////////////////////////////////
     if (strncmp(pointer, "Content-Disposition: form-data; name=\"title\"", 44) != 0) {
-        locateContentFail(__LINE__, "");
-    }
+        locateContentFail(__LINE__, "");}
     pointer += 44;
 
     if (strncmp(pointer, "\r\n", 2) != 0) {
-        locateContentFail(__LINE__, "");
-    }
+        locateContentFail(__LINE__, "");}
     pointer += 2;
 
-    quinter = strstr(pointer, boundary);
+    quinter = strstr(pointer, boundary) - 2;
     if (quinter - pointer <= 2 || quinter - pointer > MAX_TITLE_BYTES) {
-        locateContentFail(__LINE__, "");
-    }
+        locateContentFail(__LINE__, "");}
 
     // Should skip through whitespace
     while (*pointer == ' ' || *pointer == '\t' || *pointer == '\n' || *pointer == '\r') {
         pointer++;
         if (pointer >= end) {
-            locateContentFail(__LINE__, "");
-        }
-    }
-    char title[MAX_TITLE_BYTES + 1];
-    for (int i = 0; i < quinter - pointer; i++) {
-        title[i] = pointer[i];
-    }
-    // Remove whitespace from end
-    char* endOfTitle= quinter - 1;
-    whiteSpaceCount = 0;
-    while (*endOfTitle == ' ' || *endOfTitle == '\t' || *endOfTitle == '\n' || *endOfTitle == '\r') {
-        //printf("whitepsace removed\n");
-        if (endOfTitle <= pointer) {
-            break;
-        }
-        *endOfTitle = 0;
-        endOfTitle--;
-        whiteSpaceCount++;
+            locateContentFail(__LINE__, "");}
     }
 
-    if (quinter - pointer - whiteSpaceCount <= 0) {
-        printf("Received empty title\n");
-        send_400(client, clients_ptr, "Empty title");
-        return;
-    }
-    title[quinter - pointer - whiteSpaceCount] = 0;
+    char title[MAX_TITLE_BYTES + 1] = {0};
+    memset(error_msg, 0 , ERR_MSG_BUF_LEN);
+    sanitize_title(pointer, title, min(quinter - pointer, MAX_TITLE_BYTES + 1), error_msg);
+    if (strlen(error_msg) > 0) {
+        locateContentFail(__LINE__, error_msg);}
 
-    // Check if title string is empty
-    if (strlen(title) == 0) {
-        printf("Received empty title\n");
-        send_400(client, clients_ptr, "Empty title");
-        return;
-    }
 
-    kosher_chars = num_kosher_chars(title, 0);
-    if (kosher_chars <= 0) {
-        locateContentFail(__LINE__, "Title is not kosher");
-    }
-    if (kosher_chars > MAX_TITLE_CHARACTERS) {
-        locateContentFail(__LINE__, "Title contained too many characterss");
-    }
-
-    if (contains_profanity(title)) {
-        locateContentFail(__LINE__, "Title has swears );");
-    }
-
-    pointer = strstr(quinter, "\r\n");
+    pointer = strstr(quinter, boundary);
     if (pointer == 0) {
-        locateContentFail(__LINE__, "");
-    }
+        locateContentFail(__LINE__, "");}
+    pointer = strstr(pointer, "\r\n");
+    if (pointer == 0) {
+        locateContentFail(__LINE__, "");}
     pointer += 2;
-
     // END TITLE ////////////////////////////
 
+    // GET BODY /////////////////////////////
     if (strncmp(pointer, "Content-Disposition: form-data; name=\"composeText\"", 50) != 0) {
         locateContentFail(__LINE__, "");
     }
@@ -1270,7 +1395,7 @@ void handle_post(struct client_info* client, struct client_info** clients_ptr, s
     }
     // Remove whitespace from end
     char* endOfTextArea = quinter - 1;
-    whiteSpaceCount = 0;
+    int whiteSpaceCount = 0;
     while (*endOfTextArea == ' ' || *endOfTextArea == '\t' || *endOfTextArea == '\n' || *endOfTextArea == '\r') {
         //printf("whitepsace removed\n");
         if (endOfTextArea <= pointer) {
@@ -1282,16 +1407,13 @@ void handle_post(struct client_info* client, struct client_info** clients_ptr, s
     }
 
     if (quinter - pointer - whiteSpaceCount <= 0) {
-        printf("Received empty text area\n");
-        send_400(client, clients_ptr, "Empty text area");
-        return;
-    }
+        print_msg_send400_return("Received empty text area\n");}
     body[quinter - pointer - whiteSpaceCount] = 0;
 
     if (strlen(body) == 0) {
         locateContentFail(__LINE__, "Empty text area");}
 
-    kosher_chars = num_kosher_chars(body, 1);
+    int kosher_chars = num_kosher_chars(body, 1);
     if (kosher_chars <= 0) {
         locateContentFail(__LINE__, "Text area is not kosher");}
 
@@ -1313,8 +1435,7 @@ void handle_post(struct client_info* client, struct client_info** clients_ptr, s
     for (int i = 0; i < strlen(username); i++) {
         // Skip tolower if unicode
         if (username[i] >> 7 & 1 == 1) {
-            continue;
-        }
+            continue;}
         username[i] = tolower(username[i]);
     }
     printf("username = %s\n", username);
@@ -1323,8 +1444,7 @@ void handle_post(struct client_info* client, struct client_info** clients_ptr, s
     for (int i = 0; i < strlen(recipient); i++) {
         // Skip tolower if unicode
         if (recipient[i] >> 7 & 1 == 1) {
-            continue;
-        }
+            continue;}
         recipient[i] = tolower(recipient[i]);
     }
     printf("recipient = %s\n", recipient);
@@ -1382,10 +1502,77 @@ void handle_post(struct client_info* client, struct client_info** clients_ptr, s
 
     print_users(*users_ptr);
 
-    send_200(client, clients_ptr);
+    send_201(client, clients_ptr);
 
     drop_client(client, clients_ptr);
 }
 #if PRINT_POST_PARSE == false
 #undef printf
 #endif
+
+int min(int a, int b) {
+    if (a > b) {
+        return b;}
+    return a;
+}
+
+
+// Must have null terminating char, buffer should be able to contain name
+void sanitize_name(char* name, char* buffer, int buffer_size, char* error_msg) {
+    int length = strlen(name);
+    int j = 0;
+    for (int i = 0; i < length; i++) {
+        if (name[i] == ' ' || name[i]  == '\t' || name[i]  == '\n' || name[i]  == '\r') {
+            continue;}
+        if (j == buffer_size) {
+            break;}
+        buffer[j++] = name[i];
+    }
+
+    if (strlen(buffer) == 0) {
+        error_msg = "Empty name\n"; return;}
+
+    int kosher_chars;
+    kosher_chars = num_kosher_chars(buffer, 0);
+    if (kosher_chars <= 0) {
+        error_msg = "Name is not kosher\n"; return;}
+
+    if (kosher_chars > MAX_NAME_CHARACTERS) {
+        error_msg = "Name contained too many characters\n"; return;}
+
+    if (contains_profanity(buffer)) {
+        error_msg = "Name has swears );\n"; return;}
+}
+
+void sanitize_title(char* title, char* buffer, int buffer_size, char* error_msg) {
+    // Skip beggining whitespace
+    int i = 0;
+    while (i < strlen(title) &&
+          (title[i] == ' ' || title[i]  == '\t' || title[i]  == '\n' || title[i]  == '\r')) {
+        i++;
+    }
+
+    for (int j = 0; j < buffer_size && j < strlen(title); j++) {
+        buffer[j] = title[i++];
+    }
+
+    // Remove whitespace from end
+    i = strlen(buffer);
+    while (i >= 0 &&
+          (buffer[i] == ' ' || buffer[i]  == '\t' || buffer[i]  == '\n' || buffer[i]  == '\r')) {
+        buffer[i] = 0;
+    }
+
+    if (strlen(title) == 0) {
+        error_msg = "Received empty title\n"; return;}
+
+    int kosher_chars = num_kosher_chars(title, 0);
+    if (kosher_chars <= 0) {
+        error_msg = "Title is not kosher\n"; return;}
+
+    if (kosher_chars > MAX_TITLE_CHARACTERS) {
+        error_msg = "Title contained too many characters\n"; return;}
+
+    if (contains_profanity(title)) {
+        error_msg = "Title has swears );\n"; return;}
+}

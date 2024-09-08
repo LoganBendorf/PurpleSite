@@ -302,6 +302,8 @@ int main(int argc, char* argv[]) {
                         }
                     } else if (strncmp("POST /", client->request, 6) == 0) {
                         handle_post(client, &clients, &users);
+                    } else if (strncmp("PUT /", client->request, 5) == 0) {
+                        handle_put(client, &clients, users);
                     } else {
                         send_400(client, &clients, NULL);
                     }
@@ -322,7 +324,8 @@ int main(int argc, char* argv[]) {
     }
 
     printf("\nClosing server...\n");
-    // semms to work fine
+    save_users_to_file(users);
+    // seems to work fine
     while (clients) drop_client(clients, &clients);
     SSL_CTX_free(ctx);
     close(server);
