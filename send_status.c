@@ -2,6 +2,25 @@
 #include "send_status.h"
 #include "connection_helpers.h"
 
+// For serving resources, don't drop client
+void send_200(struct client_info* client, unsigned long content_length, const char* content_type) {
+    char buffer[1024] = {0};
+    sprintf(buffer, "HTTP/1.1 200 OK\r\n");
+    SSL_write(client->ssl, buffer, strlen(buffer));
+
+    sprintf(buffer, "Connection: close\r\n");
+    SSL_write(client->ssl, buffer, strlen(buffer));
+
+    sprintf(buffer, "Content-Length: %lu\r\n", content_length);
+    SSL_write(client->ssl, buffer, strlen(buffer));
+
+    sprintf(buffer, "Content-Type: %s\r\n", content_type);
+    SSL_write(client->ssl, buffer, strlen(buffer));
+
+    sprintf(buffer, "\r\n");
+    SSL_write(client->ssl, buffer, strlen(buffer));
+}
+
 void send_201(struct client_info* client, struct client_info** clients_ptr) {
     if (client == NULL) {
         return;}
@@ -10,6 +29,7 @@ void send_201(struct client_info* client, struct client_info** clients_ptr) {
                        "Location: /emails.txt\r\n"
                        "\r\n";
     SSL_write(client->ssl, c201, strlen(c201));
+    drop_client(client, clients_ptr);
 }
 
 void send_301(struct client_info* client, struct client_info** clients_ptr) {
@@ -21,7 +41,6 @@ void send_301(struct client_info* client, struct client_info** clients_ptr) {
     // Send is intentional, redirecting from http to https
     send(client->socket, c301, strlen(c301), 0);
     drop_client(client, clients_ptr);
-    return;
 }
 
 #if PRINT_400 == false
@@ -57,7 +76,7 @@ void send_400(struct client_info* client, struct client_info** clients_ptr, char
 
     SSL_write(client->ssl, c400, 256);
     drop_client(client, clients_ptr);
-    printf("Sent custom 500:\n%s\n", c400);
+    printf("Sent custom 400:\n%s\n", c400);
 }
 #if PRINT_400 == false
 #undef printf

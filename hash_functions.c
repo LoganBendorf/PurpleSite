@@ -127,11 +127,11 @@ bool contains_profanity(char* string) {
     printf("min_size_profanity = %d\n", min_size_profanity);
     printf("max_size_profanity = %d\n", max_size_profanity);
     for (int i = min_size_profanity; i <= max_size_profanity + 1; i++) {
-        printf("in for loop\n");
+        //printf("in for loop\n");
         pointer = 0;
         quinter = i;
         while (quinter <= strlen(bad_msg_buffer)) {
-            printf("in while loop\n");
+            //printf("in while loop\n");
 
             strcpy(temp, bad_msg_buffer);
             temp[quinter + 1] = 0;

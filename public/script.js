@@ -25,6 +25,33 @@ let textArea = document.querySelector('.textAreaInput');
 textArea.addEventListener('keydown', textAreaResizeInput);
 textArea.onkeyup = textAreaResizeInputUp;
 
+class Email {
+    constructor(sender, title, hash, body, upvotes, time_created) {
+        this.sender = sender;
+        this.title = title;
+        this.hash = hash;
+        this.body = body;
+        this.upvotes = upvotes;
+        this.time_created = time_created;
+
+        this.next = null;
+    }
+}
+
+class Vote {
+    constructor(sender, title, hash) {
+        this.sender = sender;
+        this.title = title;
+        this.hash = hash;
+
+        this.next = null;
+        this.prev = null;
+    }
+}
+
+let UserEmails = null;
+let UserVotes = null;
+
 function globalClickListener(event) {
     console.log("globalClickListener()");
     console.log(event);
@@ -33,13 +60,14 @@ function globalClickListener(event) {
     closeEmojiMenuIfShould(event, "mouse");
 }
 
-function globalKeyDownListener(event) {
+async function globalKeyDownListener(event) {
     closeEmojiMenuIfShould(event, "keyboard");
 
     // Check if should update emails
     if (event.key === 'Tab') {
         console.log("key equaled tab\n");
         currentUsername = document.querySelector('.usernameInput').value;
+        await getVotes();
         getEmails();
     }
 }
@@ -82,6 +110,11 @@ function closeEmojiMenuIfShould(event, keyboardOrMouse) {
 function goToHallOfFame() {
     console.log("goToHallOfFame()");
     location.replace("https://www.purplesite.skin/hall_of_fame");
+}
+
+function goToLanding() {
+    console.log("goToLanding()");
+    location.replace("https://www.purplesite.skin");
 }
 
 function sendFunction() {
@@ -165,7 +198,7 @@ function resizeInput(e) {
     e.target.style.width = (e.target.value.length +1) * .5 + 1.25 + "em";
 }
 
-function resizeInputUp(e) {
+async function resizeInputUp(e) {
     const classes = e.target.className.split(' ');
     let name = 0;
     let title = 0;
@@ -193,6 +226,7 @@ function resizeInputUp(e) {
             if (e.target.classList[i] === 'usernameInput') {
                 console.log("class equaled usernameInput\n");
                 currentUsername = e.target.value;
+                await getVotes();
                 getEmails();
             }
         }
@@ -223,8 +257,15 @@ function textAreaResizeInputUp(e) {
     }
 }
 
+async function initHallOfFame() {
+    //await getVotes();
+    getAllEmails();
+}
+
 function clearEmails() {
     console.log("clearEmails()");
+
+    UserEmails = null;
 
     const emailContainer = document.querySelector('.emailContainer');
     if (!emailContainer.hasChildNodes) {
@@ -248,114 +289,75 @@ function clearEmails() {
     }
 }
 
-function updateEmails(emails) {
+function findDelimitedItem(emails) {
+    let index = emails.match(DELIMITER);
+    if (index === null) {
+        console.log("failed to find item"); return "";}
+    index = index.index;
+    index += DELIMITER.length;
+    emails = emails.slice(index, emails.length);
+
+    let endIndex = emails.match(DELIMITER);
+    if (endIndex === null) {
+        console.log("failed to find end"); return "";}
+    endIndex = endIndex.index;
+    const itemStr = emails.slice(0, endIndex);
+    emails = emails.slice(endIndex, emails.length);
+    console.log("item = " +  itemStr);
+    return [emails, itemStr]
+}
+
+function updateEmails(emails, page) {
     console.log("updateEmails()");
     console.log("emails type = " + typeof(emails));
 
-    clearEmails();
-
-    console.log("current user = " + currentUsername);
+    if (page == "landing") {
+        clearEmails();
+    }
+    let recipientStr;
+    let res;
     while (emails.length > 0) {
         console.log("ADDING EMAIL");
 
-        // Sender 
-        let senderIndex = emails.match(DELIMITER);
-        if (senderIndex === null) {
-            console.log("failed to find sender"); break;}
-        senderIndex = senderIndex.index;
-        senderIndex += DELIMITER.length;
-        emails = emails.slice(senderIndex, emails.length);
+        if (page == "hallOfFame") {
+            res = findDelimitedItem(emails);
+            emails = res[0];
+            recipientStr = res[1];
+        }
 
-        let endIndex = emails.match(DELIMITER);
-        if (endIndex === null) {
-            console.log("failed to find sender end"); break;}
-        endIndex = endIndex.index;
-        const senderStr = emails.slice(0, endIndex);
-        emails = emails.slice(endIndex, emails.length);
-        console.log("sender = " +  senderStr);
+        res = findDelimitedItem(emails);
+        emails = res[0];
+        const senderStr = res[1];
 
-        // Title
-        let titleIndex = emails.match(DELIMITER);
-        if (titleIndex === null) {
-            console.log("failed to find title"); break;}
-        titleIndex = titleIndex.index;
-        titleIndex += DELIMITER.length;
-        emails = emails.slice(titleIndex, emails.length);
+        res = findDelimitedItem(emails);
+        emails = res[0];
+        const titleStr = res[1];
 
-        endIndex = emails.match(DELIMITER);
-        if (endIndex === null) {
-            console.log("failed to find title end"); break;}
-        endIndex = endIndex.index;
-        const titleStr = emails.slice(0, endIndex);
-        emails = emails.slice(endIndex, emails.length);
-        console.log("title = " +  titleStr);
+        res = findDelimitedItem(emails);
+        emails = res[0];
+        const hashStr = res[1];
 
-        // Hash
-        let hashIndex = emails.match(DELIMITER);
-        if (hashIndex === null) {
-            console.log("failed to find hash"); break;}
-        hashIndex = hashIndex.index;
-        hashIndex += DELIMITER.length;
-        emails = emails.slice(hashIndex, emails.length);
+        res = findDelimitedItem(emails);
+        emails = res[0];
+        const bodyStr = res[1];
 
-        endIndex = emails.match(DELIMITER);
-        if (endIndex === null) {
-            console.log("failed to find hash end"); break;}
-        endIndex = endIndex.index;
-        const hashStr = emails.slice(0, endIndex);
-        emails = emails.slice(endIndex, emails.length);
-        console.log("hash = " +  hashStr);
+        res = findDelimitedItem(emails);
+        emails = res[0];
+        const upvotesStr = res[1];
 
-        // Body
-        let bodyIndex = emails.match(DELIMITER);
-        if (bodyIndex === null) {
-            console.log("failed to find body"); break;}
-        bodyIndex = bodyIndex.index;
-        bodyIndex += DELIMITER.length;
-        emails = emails.slice(bodyIndex, emails.length);
+        res = findDelimitedItem(emails);
+        emails = res[0];
+        const timeStr = res[1];
 
-        endIndex = emails.match(DELIMITER);
-        if (endIndex === null) {
-            console.log("failed to find body end"); break;}
-        endIndex = endIndex.index;
-        const bodyStr = emails.slice(0, endIndex);
-        emails = emails.slice(endIndex, emails.length);
-        console.log("body = " +  bodyStr);
+        if (page == "ladning") {
+            if (UserEmails === null) {
+                UserEmails = new Email(senderStr, titleStr, hashStr, bodyStr, upvotesStr, timeStr);
+            } else {
+                let tail = new Email(senderStr, titleStr, hashStr, bodyStr, upvotesStr, timeStr);
+                UserEmails.next = tail;
+            }
+        }
 
-        // Upvotes
-        let upvotesIndex = emails.match(DELIMITER);
-        if (upvotesIndex === null) {
-            console.log("failed to find upvotes"); break;}
-        upvotesIndex = upvotesIndex.index;
-        upvotesIndex += DELIMITER.length;
-        emails = emails.slice(upvotesIndex, emails.length);
-
-        endIndex = emails.match(DELIMITER);
-        if (endIndex === null) {
-            console.log("failed to find upvotes end"); break;}
-        endIndex = endIndex.index;
-        const upvotesStr = emails.slice(0, endIndex);
-        emails = emails.slice(endIndex, emails.length);
-        console.log("upvotes = " +  upvotesStr);
-
-        // Time created
-        let timeIndex = emails.match(DELIMITER);
-        if (timeIndex === null) {
-            console.log("failed to find time"); break;}
-        timeIndex = timeIndex.index;
-        timeIndex += DELIMITER.length;
-        emails = emails.slice(timeIndex, emails.length);
-
-        endIndex = emails.match(DELIMITER);
-        if (endIndex === null) {
-            console.log("failed to find time end"); break;}
-        endIndex = endIndex.index;
-        const timeStr = emails.slice(0, endIndex);
-        emails = emails.slice(endIndex, emails.length);
-        console.log("time = " +  timeStr);
-
-        
-        console.log("2");
         // Delimiter at the end of an email
         emails = emails.slice(DELIMITER.length, emails.length);
         console.log("emails after search = " + emails);
@@ -365,9 +367,16 @@ function updateEmails(emails) {
         let email = document.createElement('div');
         email.classList.add('email', 'receivedEmail');
 
-        let hash = document.createElement('div');
-        hash.textContent = "Hash: " + hashStr;
-        hash.classList.add('emailHash', 'receivedEmail');
+        let recipient;
+        if (page == "hallOfFame") {
+            recipient = document.createElement('div');
+            recipient.textContent = "Recipient: " + recipientStr;
+            recipient.classList.add('emailSender', 'receivedEmail');
+        }
+
+        //let hash = document.createElement('div');
+        //hash.textContent = "Hash: " + hashStr;
+        //hash.classList.add('emailHash', 'receivedEmail');
 
         let sender = document.createElement('div');
         sender.textContent = "From: " + senderStr;
@@ -378,22 +387,68 @@ function updateEmails(emails) {
         title.classList.add('emailTitle', 'receivedEmail');
 
         let body = document.createElement('div');
-        body.textContent = bodyStr.slice(0, 30);;
+        const MAX_CHARACTERS_IN_TINY_EMAIL = 60;
+        let slicedBody = "";
+        let count = 0;
+        for (let i = 0; i < bodyStr.length; i++) {
+            if (count >= MAX_CHARACTERS_IN_TINY_EMAIL) {
+                break;}
+            
+            let codePoint = bodyStr.codePointAt(i);
+            // emojis count twice cause they are fat
+            if (codePoint > 0xFFFF) {
+                count++;
+                slicedBody += bodyStr[i];
+                i++;
+            }
+            count++;
+            slicedBody += bodyStr[i];
+        }
+        console.log(slicedBody);
+        body.textContent = slicedBody;
         body.classList.add('emailBody', 'receivedEmail');
 
         let upvoteContainer = document.createElement('div');
         upvoteContainer.classList.add('emailUpvoteContainer', 'receivedEmail');
 
+        if (page == "landing") {
+            let votedOn = false;
+            let votesHead = UserVotes;
+            console.log("Searching votes")
+            while (votesHead !== null) {
+                console.log("Sender. Vote: " + votesHead.sender + ", Email: " + senderStr);
+                console.log("Title. Vote: " + votesHead.title + ", Email: " + titleStr);
+                console.log("Hash. Vote: " + votesHead.hash + ", Email: " + hashStr);
+                if (votesHead.sender == senderStr && votesHead.title == titleStr && votesHead.hash == hashStr) {
+                    votedOn = true;
+                    break;
+                }
+                votesHead = votesHead.next;
+            }
+        }
+
         let upvotes = document.createElement('div');
         upvotes.classList.add('emailUpvotes', 'receivedEmail');
         upvotes.textContent = upvotesStr;
-
+        
         let upvoteButton = document.createElement('button');
         upvoteButton.textContent = "^";
-        upvoteButton.classList.add('emailUpvoteButton', 'receivedEmail', 'unUpvoted');
-        upvoteButton.addEventListener("click", upvoteClick);
+        upvoteButton.classList.add('emailUpvoteButton', 'receivedEmail');
+        if (page == "landing") {
+            if (votedOn == true) {
+                upvoteButton.classList.add('upvoted');
+                console.log("Email was voted on");  
+            } else {
+                upvoteButton.classList.add('unUpvoted')
+            }
+        }
+        upvoteButton.addEventListener("click", voteClick);
 
-        email.appendChild(hash);
+        if (page == "landing") {
+            //email.appendChild(hash);
+        }
+        if (page == "hallOfFame") {
+            email.appendChild(recipient);}
         email.appendChild(sender);
         email.appendChild(title);
         email.appendChild(body);
@@ -402,6 +457,39 @@ function updateEmails(emails) {
         email.appendChild(upvoteContainer);
         emailContainer.appendChild(email);    
     }
+}
+
+async function updateVotes(votes) {
+    
+    UserVotes = null;
+
+    if (votes == "none") {
+        return;}
+    
+    while (votes.length > 0) {
+        res = findDelimitedItem(votes);
+        votes = res[0];
+        const senderStr = res[1];
+
+        res = findDelimitedItem(votes);
+        votes = res[0];
+        const titleStr = res[1];
+
+        res = findDelimitedItem(votes);
+        votes = res[0];
+        const hashStr = res[1];
+
+        if (UserVotes === null) {
+            UserVotes = new Vote(senderStr, titleStr, hashStr);
+        } else {
+            let tail = new Vote(senderStr, titleStr, hashStr);
+            UserVotes.next = tail;
+        }
+
+        // Delimiter at the end
+        votes = votes.slice(DELIMITER.length, votes.length);
+    }
+
 }
 
 async function emailSentPopUp(recipientString) {
@@ -477,7 +565,7 @@ async function makePost() {
             method: "POST",
             body: postData,
         })
-        .then(response => {
+        .then(async response => {
             if (!response.ok) {
                 if (response.status === 400) {
                     console.log(response.statusText);
@@ -499,6 +587,7 @@ async function makePost() {
                 console.log(response);
                 emailSentPopUp(recipientString);
                 currentUsername = usernameString;
+                await getVotes();
                 getEmails(); 
 
             } else {
@@ -509,114 +598,102 @@ async function makePost() {
     };
 }
 
-function upvoteClick(e) {
-    console.log("upvoteClick");
+function voteClick(e) {
+    console.log("voteClick");
 
     const classes = e.target.className.split(' ');
     for (let i = 0; i < classes.length; i++) {
         if (classes[i] === 'upvoted') {
-            unUpvote(e);
+            vote(e, "unupvote");
             return;
         }
         if (classes[i] === 'unUpvoted') {
-            upvote(e);
+            vote(e, "upvote");
             return
         }
     }
-    console.log("Error: Still in upvoteClick function. Button must have had wrong classes assigned\n");
+    console.log("Error: Still in voteClick function. Button must have had wrong classes assigned\n");
 }
 
-async function upvote(e) {
-    console.log("upvote");
+async function vote(e, voteType) {
+    console.log("vote()");
 
-    e.target.classList.remove('unUpvoted');
-    e.target.classList.add('upvoted');
-
-    
-    const upvoteContainer = e.target.parentNode;
-    const email = upvoteContainer.parentNode;
-    const emailChildren = email.childNodes;
-
-    // username is global
-    let sender = "";
-    let title = "";
-    let hash = "";
-    
-    for (let i = 0; i < emailChildren.length; i++) {
-        const classes = emailChildren[i].className.split(' ');
-        for (let j = 0; j < classes.length; j++) {
-            if (classes[j] == "emailSender") {
-                let senderWithPrefix = emailChildren[i].textContent;
-                sender = senderWithPrefix.slice(6, senderWithPrefix.length);
-            }
-            if (classes[j] == "emailTitle") {
-                title = emailChildren[i].textContent;
-            }
-            if (classes[j] == "emailHash") {
-                let hashWithPrefix = emailChildren[i].textContent;
-                hash = hashWithPrefix.slice(6, hashWithPrefix.length);
-            }
-        }
+    if (voteType == "upvote") {
+        console.log('Before upvote:', e.target.classList);
+        e.target.classList.remove('unUpvoted');
+        e.target.classList.add('upvoted');
+        console.log('After upvote:', e.target.classList);
+    } else if (voteType == "unupvote") {
+        console.log('Before unupvote:', e.target.classList);
+        e.target.classList.remove('upvoted');
+        e.target.classList.add('unUpvoted');
+        console.log('After unupvote:', e.target.classList);
+    } else {
+        console.log("Error: unkown vote type");
+        return;
     }
 
-    if (sender == "") {
-        console.log("Error: sender is empty");
+    const upvoteContainer = e.target.parentNode;
+
+    const email = upvoteContainer.parentNode;
+
+    const emailContainer = email.parentNode;
+    const emailContainerChildren = emailContainer.children;
+
+    let emailNumber = 0;
+    let found = false;
+    while (emailNumber < emailContainerChildren.length) {
+        if (emailContainerChildren[emailNumber] === email) {
+            found = true;
+            break;}
+        emailNumber++;
+    }
+    if (!found) {
+        console.log("COULDN'T FIND EMAIL SOMEHOW!!!!");
         return;}
-    if (title == "") {
-        console.log("Error: title is empty");
-        return;}
-    if (hash == "") {;
-        console.log("Error: hash is empty");
-        return;}
-    // Testing serverside first
-    //if (currentUsername == "") {
-    //   console.log("Error: username is empty");
-    //    return;
-    //}
-    
+
+    let emailHead = UserEmails;
+    for (let i = 0; i < emailNumber; i++) {
+        if (emailHead === null) {
+            console.log("EMAIL IN DATA STRUCTURE WAS NULL!!!");
+            return;}
+        emailHead = emailHead.next;
+    }
+
     putData = new FormData();
 
-    putData.append('vote_type', "upvote");
+    putData.append('vote_type', voteType);
     putData.append('username', currentUsername);
-    putData.append('sender', sender);
-    putData.append('title', title);
-    putData.append('hash', hash);
+    putData.append('sender', emailHead.sender);
+    putData.append('title', emailHead.title);
+    putData.append('hash', emailHead.hash);
 
-    console.log("put, sending: vote_type: upvote username: " + currentUsername + " sender: " + sender + " tite: " + title + " hash: " + hash)
+    console.log("put, sending: vote_type: " + voteType + " username: " + currentUsername + " sender: " + emailHead.sender + " tite: " + emailHead.title + " hash: " + emailHead.hash)
 
     try {
-        fetch("https://www.purplesite.skin", {
+        const response = await fetch("https://www.purplesite.skin", {
             method: "PUT",
             body: putData,
-        })
-        .then(response => {
-            if (!response.ok) {
-                if (response.status === 400) {
-                    console.log(response.statusText);
-                    console.log("Unknown 400 error. Text = " + response.statusText);
-                } else {
-                    console.log("unknown error response: " + response.status); }
-            }
-            if (response.status === 201) {
-                console.log("upvote successfully sent");
-                console.log(response);
-                // for now email pop up, should be upvoteSentPopUp or something idk
-                emailSentPopUp(recipientString);
-                //getEmails(); 
+        });
 
+        if (!response.ok) {
+            if (response.status === 400) {
+                console.log(response.statusText);
+                console.log("Unknown 400 error. Text = " + response.statusText);
             } else {
-                console.log("unknown response status: " + response.status);
-            }
-        })} catch (error) {
-            console.log(error);
-    };
-}
-
-async function unUpvote(e) {
-    console.log("unUpvote");
-
-    e.target.classList.remove('upvoted');
-    e.target.classList.add('unUpvoted');
+                console.log("unknown error response: " + response.status); }
+        }
+        if (response.status === 201) {
+            console.log("upvote successfully sent");
+            console.log(response);
+            // for now email pop up, should be upvoteSentPopUp or something idk
+            emailSentPopUp(voteType);
+        } else {
+            console.log("unknown response status: " + response.status);}
+    } catch (error) {
+        console.log(error);};
+    await getVotes();
+    getEmails();
 }
 
 async function getEmails() {
@@ -631,8 +708,46 @@ async function getEmails() {
             let data = read.value;
             let str = new TextDecoder().decode(data);
             console.log(str);
-            updateEmails(str);
+            updateEmails(str, "landing");
     });
+}
+
+async function getVotes() {
+    console.log("getVotes()");
+
+    try {
+        const response = await fetch("https://www.purplesite.skin" + "/users/" + currentUsername + "/votes", {
+            method: "GET",
+        });
+
+        let reader = response.body.getReader();
+        let read = await reader.read();
+        let data = read.value;
+        let str = new TextDecoder().decode(data);
+        console.log("votes response: " + str);
+        updateVotes(str);
+    } catch (error) {
+        console.error("Error fetching votes: ", error);
+    }
+}
+
+async function getAllEmails() {
+    console.log("getAllEmails()");
+    try {
+    fetch("https://www.purplesite.skin" + "/all_emails", {
+            method: "GET",
+        })
+        .then(async response => {
+            let reader = response.body.getReader();
+            let read = await reader.read();
+            let data = read.value;
+            let str = new TextDecoder().decode(data);
+            console.log("all emails respone = ", str);
+            updateEmails(str, "hallOfFame");
+    });
+    } catch (error) {
+        console.error("Error getting all emails: ", error);
+    }
 }
 
 // for fun
@@ -643,3 +758,4 @@ function deleteEverything() {
         container.removeChild(container.lastChild);
     }
 }
+

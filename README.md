@@ -4,6 +4,7 @@ Website URL: https://www.purplesite.skin
 If you want to run it yourself (only works on Linux): <br />
 * Install GCC
 * Install the openssl library, openssl requires perl be installed first <br />
+* Get a domain <br />
 * Get some kind of certification, LetsEncrypt is easy and free, or change the SSL parts of the code <br />
 * Port forward it <br />
 * Run "make" in the PurpleSite directory <br />

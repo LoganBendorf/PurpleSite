@@ -20,6 +20,7 @@
         "iterator": "c",
         "*.tcc": "c",
         "typeinfo": "c",
-        "compare": "c"
+        "compare": "c",
+        "random": "c"
     }
 }

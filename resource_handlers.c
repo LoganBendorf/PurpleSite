@@ -300,6 +300,8 @@ struct user* init_users() {
                     vote->hash = hash;
 
                     vote->next = votes;
+                    if (votes != NULL) {
+                        votes->prev = vote;}
                     votes = vote;
                 }
             } else {
@@ -502,14 +504,99 @@ void serve_resource(struct client_info* client, struct client_info** clients_ptr
     if (strcmp(path, "/hall_of_fame") == 0) {
         printf("Recursing chat\n");
         serve_resource(client, clients_ptr, users, "/hall_of_fame/index.html");
-        serve_resource(client, clients_ptr, users, "/hall_of_fame/styles.css");
+        serve_resource(client, clients_ptr, users, "/hall_of_fame/hof_styles.css");
         serve_resource(client, clients_ptr, users, "/hall_of_fame/favicon.ico");
+        return;
+    }
+
+    struct node {
+        char* buffer;
+        int size;
+    };
+
+    // return all emails (actually at most 64 for now)
+    if (strncmp(path, "/all_emails", 11) == 0) {
+        struct node* nodes[64] = {0};
+        int count = 0;
+        int total_size = 0;
+        struct user* user_head = users;
+        while (user_head) {
+            struct email* email_head = user_head->emails;
+            while (email_head) {
+                // Max email size is about 1500 bytes I think
+                struct node* nood = (struct node*) calloc(1, sizeof(struct node));
+                int bytes = 0;
+                char* buffer = (char*) calloc(1, 2048);
+                nood->buffer = buffer;
+
+                strcat(buffer, DELIMITER);
+                bytes += strlen(DELIMITER);
+
+                strcat(buffer, user_head->username);
+                bytes += strlen(user_head->username);
+                strcat(buffer, DELIMITER);
+                bytes += strlen(DELIMITER);
+
+                strcat(buffer, email_head->sender);
+                bytes += strlen(email_head->sender);
+                strcat(buffer, DELIMITER);
+                bytes += strlen(DELIMITER);
+                
+                strcat(buffer, email_head->title);
+                bytes += strlen(email_head->title);
+                strcat(buffer, DELIMITER);
+                bytes += strlen(DELIMITER);
+                
+                char hash_as_string[32] = {0};
+                sprintf(hash_as_string, "%d", email_head->hash);
+                strcat(buffer, hash_as_string);
+                bytes += strlen(hash_as_string);
+                strcat(buffer, DELIMITER);
+                bytes += strlen(DELIMITER);
+
+                strcat(buffer, email_head->body);
+                bytes += strlen(email_head->body);
+                strcat(buffer, DELIMITER);
+                bytes += strlen(DELIMITER);
+
+                char upvotes_as_string[32] = {0};
+                sprintf(upvotes_as_string, "%d", email_head->upvotes);
+                strcat(buffer, upvotes_as_string);
+                bytes += strlen(upvotes_as_string);
+                strcat(buffer, DELIMITER);
+                bytes += strlen(DELIMITER);
+
+                char time_as_string[64] = {0};
+                sprintf(time_as_string, "%ld", email_head->time_created);
+                strcat(buffer, time_as_string);
+                bytes += strlen(time_as_string);
+                strcat(buffer, DELIMITER);
+                bytes += strlen(DELIMITER);
+
+                nood->size = bytes;
+                total_size += bytes;
+
+                email_head = email_head->next;
+                nodes[count] = nood;
+                count++;
+            }
+            user_head = user_head->next;
+        }
+        send_200(client, total_size, ".txt");
+        for (int i = 0; i < count; i++) {
+            char* buffer = nodes[i]->buffer;
+            int size = nodes[i]->size;
+            SSL_write(client->ssl, buffer, size);
+            free(buffer);
+            free(nodes[i]);
+        }
+        printf("sent all emails\n");
         return;
     }
 
     // User info
     if (strncmp(path, "/users/", 7) == 0) {
-        printf("User emails requested\n");
+        printf("User info requested\n");
         char* pointer = path + 7;
         char* quinter = strstr(pointer, "/");
         if (quinter == 0) {
@@ -540,6 +627,8 @@ void serve_resource(struct client_info* client, struct client_info** clients_ptr
             if (quinter == 0) {
                 print_msg_send400_return("Unknown request for user\n");}
             // Find votes
+            printf("User votes requested\n");
+            send_200(client, 999, ".txt");
             struct vote* vote_head = user_head->votes;
             while (vote_head) {
                 int bytes = 0;
@@ -570,6 +659,8 @@ void serve_resource(struct client_info* client, struct client_info** clients_ptr
             }
         } else {
             // Find emails
+            printf("User emails requested\n");
+            send_200(client, 999, ".txt");
             struct email* email_head = user_head->emails;
             while (email_head) {
                 int bytes = 0;
@@ -652,24 +743,9 @@ void serve_resource(struct client_info* client, struct client_info** clients_ptr
 
     const char* content_type = get_content_type(full_path);
     
-
+    send_200(client, content_length, content_type);
     #define BSIZE 1024
     char buffer[BSIZE] = {0};
-
-    sprintf(buffer, "HTTP/1.1 200 OK\r\n");
-    SSL_write(client->ssl, buffer, strlen(buffer));
-
-    sprintf(buffer, "Connection: close\r\n");
-    SSL_write(client->ssl, buffer, strlen(buffer));
-
-    sprintf(buffer, "Content-Length: %lu\r\n", content_length);
-    SSL_write(client->ssl, buffer, strlen(buffer));
-
-    sprintf(buffer, "Content-Type: %s\r\n", content_type);
-    SSL_write(client->ssl, buffer, strlen(buffer));
-
-    sprintf(buffer, "\r\n");
-    SSL_write(client->ssl, buffer, strlen(buffer));
     
     int bytes_read = fread(buffer, 1, BSIZE, fp);
     while (bytes_read != 0) {
@@ -680,7 +756,7 @@ void serve_resource(struct client_info* client, struct client_info** clients_ptr
     fclose(fp);
 }
 
-typedef union {
+typedef union raw_int {
     char c[4];
     int i;
 } raw_int;
@@ -947,10 +1023,16 @@ void handle_put(struct client_info* client, struct client_info** clients_ptr, st
 
         new_vote->next = user->votes;
 
-        user->votes->prev = new_vote;
+        if (user->votes != NULL) {
+            user->votes->prev = new_vote;}
         user->votes = new_vote;
 
         email->upvotes += 1;
+        printf("\nuser (%s) upvoted\n", user->username);
+        print_user(user);
+        printf("\n (%s) was upvoted aginst\n", sender);
+
+        send_201(client, clients_ptr);
     }
 
     if (vote_type == UNUPVOTE) {
@@ -963,22 +1045,26 @@ void handle_put(struct client_info* client, struct client_info** clients_ptr, st
         }
         struct vote* temp = seen_vote;
 
-        if (temp->prev = NULL) {
+        if (temp->prev == NULL) {
             if (user->votes == temp) {
-                user->votes = temp->next;
-            }
-            temp->next->prev = NULL;
+                user->votes = temp->next;}
+            if (temp->next != NULL) {
+                temp->next->prev = NULL;}
         } else {
             temp->prev->next = temp->next;
-            temp->next->prev = temp->prev;
+            if (temp->next != NULL) {
+                temp->next->prev = temp->prev;}
         }
 
         free(temp);
 
         email->upvotes -= 1;
+        printf("\nuser (%s) unupvoted\n", user->username);
+        print_user(user);
+        printf("\n (%s) was unupvoted aginst\n", sender);
+
+        send_201(client, clients_ptr);
     }
-
-
 }
 
 // Returns email* if found, NULL if not found, -1 if error
@@ -1455,23 +1541,8 @@ void handle_post(struct client_info* client, struct client_info** clients_ptr, s
     printf("\n");
     printf("body hash = %d\n", body_hash);
     printf("End of content\n");
-    
-    // Create email 
-    struct email* new_email = (struct email*) calloc(1, sizeof(struct email));
-    if (new_email == NULL) {
-        printf("Error: New email equaled null, out of memory?");
-        return;}
-    memcpy(new_email->sender, username, MAX_NAME_BYTES + 1);
-    memcpy(new_email->title, title, MAX_TITLE_BYTES + 1);
-    new_email->hash = body_hash;
-    memcpy(new_email->body, body, MAX_COMPOSE_BYTES + 1);
-    new_email->upvotes = 0;  
-    time_t rawtime;
-    time(&rawtime);
-    printf("time created = %ld\n", rawtime);
-    new_email->time_created = rawtime;
-    
-    // Append email to user
+
+    // Find user if exists, else create one
     bool in_struct = false;
     struct user* user_head = *users_ptr;
     while (user_head) {
@@ -1497,6 +1568,40 @@ void handle_post(struct client_info* client, struct client_info** clients_ptr, s
         user_head = new_user;
     }
 
+    // Check if email already exists
+    if (in_struct) {
+        struct email* email_head = user_head->emails;
+        while (email_head) {
+            if (strncmp(username, email_head->sender, MAX_NAME_BYTES + 1) == 0) {
+                if (strncmp(title, email_head->title, MAX_TITLE_BYTES + 1) == 0) {
+                    if (body_hash == email_head->hash) {
+                        char msg[256] = {0};
+                        strcpy(msg, "Message already sent\n");
+                        send_400(client, clients_ptr, msg);
+                        return;
+                    }
+                }
+            }
+            email_head = email_head->next;
+        }
+    }
+    
+    
+    // Create email 
+    struct email* new_email = (struct email*) calloc(1, sizeof(struct email));
+    if (new_email == NULL) {
+        printf("Error: New email equaled null, out of memory?");
+        return;}
+    memcpy(new_email->sender, username, MAX_NAME_BYTES + 1);
+    memcpy(new_email->title, title, MAX_TITLE_BYTES + 1);
+    new_email->hash = body_hash;
+    memcpy(new_email->body, body, MAX_COMPOSE_BYTES + 1);
+    new_email->upvotes = 0;  
+    time_t rawtime;
+    time(&rawtime);
+    printf("time created = %ld\n", rawtime);
+    new_email->time_created = rawtime;
+    
     new_email->next = user_head->emails;
     user_head->emails = new_email;
 

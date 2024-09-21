@@ -1,6 +1,8 @@
+
+/*should be the same as styles.css except for some height changes i think*/
 html {
     width: 100%;
-    height: 95%;
+    height: 90%;
     background-color: #cb88d2;
     font-family: "Comic Neue", 'Comic Sans MS', 'Comic Sans', cursive;
     font-style: italic;
@@ -8,7 +10,7 @@ html {
     color: whitesmoke;
 }
 body {
-    height: 95%;
+    height: 91%;
     font-size: 30px;
     font-weight: 700;
 }
@@ -106,10 +108,6 @@ body {
     border-radius: 20px;
     margin-top: .3em;
     margin-bottom: 2em;
-
-    margin-right: 1em;
-    
-    /* For scrollbar */
     overflow-y: auto;
 
     width: 92%;
@@ -121,7 +119,7 @@ body {
     justify-content: flex-start;
     border-bottom: dashed #c3c3c3;
     border-width: 4px;
-    margin: .5em 1em .5em 1em;
+    margin: .5em 1em 0em 1em;
 }
 .emailSender {
     flex-basis: 1em;
@@ -151,10 +149,10 @@ body {
     flex-basis: 1em;
 }
 .unUpvoted {
-    border: solid rgb(255, 174, 174);
+    border: solid red;
 }
 .upvoted {
-    border: solid red;
+    border: solid blue;
 }
 .composeContainer {
     border: solid white;
@@ -325,33 +323,4 @@ textarea {
 
     flex-grow: 1;
     flex-shrink: 1;
-}
-
-/* scrollbar */
-/* Custom scrollbar styling */
-::-webkit-scrollbar {
-    width: 12px;
-}
-
-::-webkit-scrollbar-track {
-    background: transparent; /* The track or background */
-    /*margin-top: 10px;
-    margin-bottom: 10px;*/
-}
-
-::-webkit-scrollbar-thumb {
-    background-color: #c8bfe7; /* The thumb or handle */
-    border-radius: 6px; /* Rounded corners */
-    border: 3px #c8bfe7; /* Adds some padding */
-}
-
-::-webkit-scrollbar-button {
-    height: .21em; /* for vertical scrollbar */
-}
-
-
-/* Fallback for browsers that don’t support custom scrollbars */
-html {
-    scrollbar-color: lightpurple white;
-    scrollbar-width: thin;
 }

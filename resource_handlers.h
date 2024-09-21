@@ -5,8 +5,8 @@
 
 struct email {
     char sender[MAX_NAME_BYTES + 1];
-    int hash;
     char title[MAX_TITLE_BYTES + 1];
+    int hash;
     char body[MAX_COMPOSE_BYTES + 1];
     int upvotes;
     time_t time_created;
